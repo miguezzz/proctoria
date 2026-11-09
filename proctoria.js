@@ -26,13 +26,14 @@
     limiteSuspensoes: 3,          // na suspensão deste número a prova fica bloqueada até a liberação do administrador; 0 = sem bloqueio
     liberacaoHash: null,          // SHA-256 do código de liberação (Proctoria.resumoSHA256); nulo = liberação apenas por sessao.liberar()
     /* Cada sinal: advertência depois de avisoSeg contínuos; suspensão se persistir por mais suspensaoSeg;
-       suspensão também na advertência de número "reincidencia" dentro de reincidenciaJanelaMin. */
+       suspensão também na advertência de número "reincidencia" dentro de reincidenciaJanelaMin.
+       suspensaoSeg e reincidencia em 0: o sinal só fica registrado para revisão, sem advertência nem suspensão. */
     sinais: {
-      olhar_fora:       { avisoSeg: 2,   suspensaoSeg: 4, reincidencia: 4 },
-      cabeca_fora:      { avisoSeg: 2,   suspensaoSeg: 4, reincidencia: 4 },
+      olhar_fora:       { avisoSeg: 2,   suspensaoSeg: 0, reincidencia: 0 },   // estimativa da webcam: erra com óculos, luz e postura
+      cabeca_fora:      { avisoSeg: 2,   suspensaoSeg: 0, reincidencia: 0 },
       rosto_ausente:    { avisoSeg: 2,   suspensaoSeg: 3, reincidencia: 3 },
       mais_de_um_rosto: { avisoSeg: 1.5, suspensaoSeg: 3, reincidencia: 2 },
-      voz:              { avisoSeg: 1,   suspensaoSeg: 4, reincidencia: 3 }
+      voz:              { avisoSeg: 1,   suspensaoSeg: 0, reincidencia: 0 }    // qualquer voz no ambiente conta, inclusive TV e telefone de outra pessoa
     },
     reincidenciaJanelaMin: 5,
     cabecaYawGraus: 28,
@@ -306,6 +307,7 @@
     ".pct-adv strong{font:600 20px/1.3 Poppins,'Segoe UI',system-ui,sans-serif}",
     ".pct-adv small{display:block;font:500 16px/1.35 Poppins,'Segoe UI',system-ui,sans-serif;color:#e9dcc6;margin-top:6px}",
     ".pct-adv.pct-fim{border-left-color:#8d7f6c}.pct-adv.pct-fim b{color:#b7a892}",
+    ".pct-adv.pct-registro{border-left-color:#C99A57;font-size:16px}.pct-adv.pct-registro b{color:#C99A57}.pct-adv.pct-registro strong{font-size:17px}",
     ".pct-seletor{font:500 16px/1.3 Poppins,'Segoe UI',system-ui,sans-serif;color:#1B1512;background:#FAF5EC;border:0;border-radius:5px;padding:9px 10px;margin-top:12px;width:100%}",
     ".pct-rotulo{display:block;font:500 16px/1.3 Poppins,'Segoe UI',system-ui,sans-serif;margin:18px 0 6px}",
     ".pct-campo{font:500 22px/1.2 Poppins,'Segoe UI',system-ui,sans-serif;letter-spacing:.12em;color:#1B1512;background:#FAF5EC;border:0;border-radius:6px;padding:13px 14px;width:min(320px,100%)}",
@@ -690,7 +692,7 @@
     var imagem = this._quadro(video || this._camVideo, largura || 1280, 0.8);
     if (!imagem) return false;
     var ev = this._evento("sistema", tipo, titulo, detalhe || null);
-    ev.evidencias = video === this._telaVideo ? { tela: imagem } : { camera: imagem };
+    ev.evidencias = video && video === this._telaVideo ? { tela: imagem } : { camera: imagem };   // antes do compartilhamento, os dois são undefined
     return true;
   };
 
@@ -823,7 +825,7 @@
   Sessao.prototype._abrirTela = function () {
     var eu = this;
     return navigator.mediaDevices.getDisplayMedia({
-      video: { displaySurface: "monitor", frameRate: { ideal: 5, max: 8 } },
+      video: { displaySurface: "monitor", width: { max: 1920 }, height: { max: 1080 }, frameRate: { ideal: 1, max: 2 } },   // tela 4K/retina codificada inteira pesava no computador do participante
       audio: false, monitorTypeSurfaces: "include", selfBrowserSurface: "exclude",
       surfaceSwitching: "exclude", systemAudio: "exclude"
     }).then(function (stream) {
@@ -908,7 +910,7 @@
           }
         }
       }
-      eu._lacoId = setTimeout(passo, 90);
+      eu._lacoId = setTimeout(passo, eu._fase === "prova" ? 200 : 90);   // prova de vida e calibragem pedem mais quadros; na prova, 5 por segundo bastam
     };
     passo();
   };
@@ -1223,7 +1225,38 @@
     this._inicioProvaRelogio = performance.now();
     document.documentElement.classList.add("pct-em-prova");
     if (this.area) this.area.classList.add("pct-area");
+    this._armarSinais();
 
+    this._evento("sistema", ret ? "prova_retomada" : "prova_iniciada", ret ? "Prova retomada depois de interrupção" : "Prova iniciada", null, {
+      dados: { calibragem: this._calib.modo, tecladoRetido: this._tecladoRetido, superficie: this._superficie }
+    });
+    if (r.gravarTela) this._iniciarGravacao("tela");
+    if (r.gravarCamera) this._iniciarGravacao("camera");
+    this._armarVigilancia();
+    if (r.bloquearAcoes) this._armarBloqueios();
+    if (r.mostrarSinais || r.mostrarOlhar) this._montarSinais();
+
+    this._temporizadores.push(setInterval(function () { eu._amostrarTelemetria(); }, Math.max(0.25, r.telemetriaSeg) * 1000));
+    if (r.capturaPeriodicaSeg > 0) {
+      this._temporizadores.push(setInterval(function () {
+        if (eu._capturas.length >= 400) return;
+        var c = { t: eu._agora() }, cam = eu._quadro(eu._camVideo, 240, 0.55), tela = eu._quadro(eu._telaVideo, 800, 0.45);
+        if (cam) c.camera = cam; if (tela) c.tela = tela;
+        eu._capturas.push(c);
+      }, r.capturaPeriodicaSeg * 1000));
+    }
+    try { navigator.clipboard.writeText("").catch(function () {}); } catch (e) {}
+    if (ret && ret.queda) {
+      if (ret.queda.excedeu && r.limiteSuspensoes > 0) this._ciclo = Math.max(this._ciclo, r.limiteSuspensoes - 1);   // interrupção longa: a retomada depende do administrador
+      this._suspender("queda", "Sessão sem sinal por " + segundos(ret.queda.duracaoMs || 0) + ". O tempo de prova seguiu em contagem.");
+      this._tempoSuspensoMs += ret.queda.duracaoMs || 0;
+    }
+    this._conferirCondicoesIniciais();
+  };
+
+  /* Condições de rosto, cabeça e olhar, avaliadas a cada leitura do detector. Separado de iniciarProva para a área de testes. */
+  Sessao.prototype._armarSinais = function () {
+    var eu = this, r = this.regras;
     var criar = function (tipo, titulo, detalhar) {
       var c = r.sinais[tipo];
       var semPausas = tipo === "rosto_ausente" && r.semPausasSeg > 0;   // nesse modo, a ausência invalida em vez de suspender
@@ -1251,32 +1284,6 @@
         return "Direção estimada: " + (lados.join(" e ") || "limite da tela") + ".";
       })
     };
-
-    this._evento("sistema", ret ? "prova_retomada" : "prova_iniciada", ret ? "Prova retomada depois de interrupção" : "Prova iniciada", null, {
-      dados: { calibragem: this._calib.modo, tecladoRetido: this._tecladoRetido, superficie: this._superficie }
-    });
-    if (r.gravarTela) this._iniciarGravacao("tela");
-    if (r.gravarCamera) this._iniciarGravacao("camera");
-    this._armarVigilancia();
-    if (r.bloquearAcoes) this._armarBloqueios();
-    if (r.mostrarSinais || r.mostrarOlhar) this._montarSinais();
-
-    this._temporizadores.push(setInterval(function () { eu._amostrarTelemetria(); }, Math.max(0.25, r.telemetriaSeg) * 1000));
-    if (r.capturaPeriodicaSeg > 0) {
-      this._temporizadores.push(setInterval(function () {
-        if (eu._capturas.length >= 400) return;
-        var c = { t: eu._agora() }, cam = eu._quadro(eu._camVideo, 240, 0.55), tela = eu._quadro(eu._telaVideo, 800, 0.45);
-        if (cam) c.camera = cam; if (tela) c.tela = tela;
-        eu._capturas.push(c);
-      }, r.capturaPeriodicaSeg * 1000));
-    }
-    try { navigator.clipboard.writeText("").catch(function () {}); } catch (e) {}
-    if (ret && ret.queda) {
-      if (ret.queda.excedeu && r.limiteSuspensoes > 0) this._ciclo = Math.max(this._ciclo, r.limiteSuspensoes - 1);   // interrupção longa: a retomada depende do administrador
-      this._suspender("queda", "Sessão sem sinal por " + segundos(ret.queda.duracaoMs || 0) + ". O tempo de prova seguiu em contagem.");
-      this._tempoSuspensoMs += ret.queda.duracaoMs || 0;
-    }
-    this._conferirCondicoesIniciais();
   };
 
   Sessao.prototype._conferirCondicoesIniciais = function () {
@@ -1445,6 +1452,7 @@
   /* Advertência ao participante. Devolve verdadeiro quando a reincidência leva à suspensão. */
   Sessao.prototype._advertir = function (tipo, ev) {
     var eu = this, agora = performance.now(), c = this.regras.sinais[tipo], janela = this.regras.reincidenciaJanelaMin * 60000;
+    if (!(c.suspensaoSeg > 0) && !(c.reincidencia > 0)) { this._mostrarAdvertencia(tipo, 0, false, true); return false; }   // só registro
     this._nAdvertencias++;
     ev.dados = ev.dados || {}; ev.dados.advertencia = this._nAdvertencias;
     var recentes = (this._avisos[tipo] || []).filter(function (t) { return agora - t < janela; });
@@ -1460,7 +1468,7 @@
     return false;
   };
 
-  Sessao.prototype._mostrarAdvertencia = function (tipo, prazoMs, invalida) {
+  Sessao.prototype._mostrarAdvertencia = function (tipo, prazoMs, invalida, registro) {
     var eu = this, m = MENSAGENS[tipo];
     if (!this._advCaixa) {
       this._advCaixa = el("div", { class: "pct-advertencias", "aria-live": "assertive" });
@@ -1469,10 +1477,13 @@
     }
     this._removerAdvertencia(tipo);
     var prazo = el("small");
-    var caixa = el("div", { class: "pct-adv", role: "alert" }, [
-      el("b", { text: "Advertência " + this._nAdvertencias }), el("strong", { text: m[0] + ". " }), document.createTextNode(m[1]), prazo
-    ]);
-    this._advAtivas[tipo] = { el: caixa, prazo: prazo, limite: prazoMs > 0 ? performance.now() + prazoMs : null, fim: null, invalida: !!invalida };
+    var caixa = registro
+      ? el("div", { class: "pct-adv pct-registro", role: "status" }, [
+          el("b", { text: "Ocorrência registrada" }), el("strong", { text: m[0] + ". " }),
+          document.createTextNode("A prova segue normalmente. A ocorrência será analisada pelo administrador."), prazo])
+      : el("div", { class: "pct-adv", role: "alert" }, [
+          el("b", { text: "Advertência " + this._nAdvertencias }), el("strong", { text: m[0] + ". " }), document.createTextNode(m[1]), prazo]);
+    this._advAtivas[tipo] = { el: caixa, prazo: prazo, limite: prazoMs > 0 ? performance.now() + prazoMs : null, fim: null, invalida: !!invalida, registro: !!registro };
     this._advCaixa.appendChild(caixa);
     this._atualizarAdvertencias();
   };
@@ -1493,8 +1504,8 @@
     var a = this._advAtivas[tipo];
     if (!a || a.fim !== null) return;
     a.fim = performance.now();
-    a.el.className = "pct-adv pct-fim";
-    a.prazo.textContent = "Advertência registrada no histórico da sessão.";
+    a.el.className = "pct-adv pct-fim" + (a.registro ? " pct-registro" : "");
+    a.prazo.textContent = a.registro ? "" : "Advertência registrada no histórico da sessão.";
   };
 
   Sessao.prototype._removerAdvertencia = function (tipo) {
@@ -1732,27 +1743,44 @@
   /* --------------------------- gravação ----------------------------- */
 
   Sessao.prototype._iniciarGravacao = function (tipo) {
+    var eu = this, origem = tipo === "tela" ? this._telaStream : this._camStream;
+    if (!origem || !this._trilhaViva(origem, "video", true)) return;
+    if (tipo === "tela") return this._gravar(tipo, origem.getVideoTracks()[0]);
+    /* Câmera: grava uma cópia em 640 x 360 desenhada num canvas, a 10 quadros por segundo. A captura segue em 720p para
+       o detector e as fotos de identidade. Uma cópia da trilha com applyConstraints não serve: o Chrome grava na resolução original. */
+    var v = this._camVideo, c = el("canvas"), ctx;
+    c.width = 640; c.height = 360; ctx = c.getContext("2d");
+    var copia = c.captureStream(10).getVideoTracks()[0];
+    var id = setInterval(function () {
+      if (v.readyState < 2 || !v.videoWidth) return;
+      var esc = Math.min(640 / v.videoWidth, 360 / v.videoHeight), w = v.videoWidth * esc, h = v.videoHeight * esc;
+      ctx.drawImage(v, (640 - w) / 2, (360 - h) / 2, w, h);   // câmera 4:3 fica com faixas laterais, sem distorcer
+    }, 100);
+    this._gravar(tipo, copia, function () { clearInterval(id); copia.stop(); });
+  };
+
+  Sessao.prototype._gravar = function (tipo, video, liberar) {
     var eu = this;
     try {
-      var origem = tipo === "tela" ? this._telaStream : this._camStream;
-      if (!origem || !this._trilhaViva(origem, "video", true)) return;
-      var trilhas = origem.getVideoTracks().concat(this._camStream.getAudioTracks());
+      var trilhas = [video].concat(this._camStream.getAudioTracks());
       var mimes = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4;codecs=avc1,mp4a.40.2", "video/mp4"];
       var mime = mimes.filter(function (m) { return MediaRecorder.isTypeSupported(m); })[0] || "";
       var rec = new MediaRecorder(new MediaStream(trilhas), {
-        mimeType: mime, videoBitsPerSecond: tipo === "tela" ? 350000 : 200000, audioBitsPerSecond: 24000
+        mimeType: mime, videoBitsPerSecond: tipo === "tela" ? 150000 : 100000, audioBitsPerSecond: 24000
       });
       var g = { tipo: tipo, inicioT: this._agora(), fimT: null, partes: [], bytes: 0, mime: mime || rec.mimeType || "video/webm", rec: rec };
       rec.ondataavailable = function (e) {
         if (!e.data || !e.data.size) return;
-        g.partes.push(e.data); g.bytes += e.data.size;
+        if (!eu.cfg.aoTrecho) g.partes.push(e.data);   // com servidor, o trecho já foi enviado: guardar aqui só acumula memória
+        g.bytes += e.data.size;
         g.n = (g.n || 0) + 1;
         if (eu.cfg.aoTrecho) { try { eu.cfg.aoTrecho(tipo, e.data, { segmento: (eu.cfg.segmentoInicial || 0) + eu._gravacoes[tipo].indexOf(g) + 1, n: g.n, inicioT: g.inicioT, mime: g.mime }); } catch (x) {} }
       };
-      g.parada = new Promise(function (ok) { rec.onstop = function () { g.fimT = eu._agora(); ok(); }; });
+      g.parada = new Promise(function (ok) { rec.onstop = function () { g.fimT = eu._agora(); if (liberar) liberar(); ok(); }; });
       rec.start(Math.max(1000, this.regras.trechoGravacaoMs));
       this._gravacoes[tipo].push(g);
     } catch (e) {
+      if (liberar) liberar();
       this._evento("sistema", "gravacao_falhou", "Gravação não iniciada", tipo + ": " + String(e && e.message || e));
     }
   };

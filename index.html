@@ -78,7 +78,7 @@ details>div{display:grid;gap:14px;margin-top:14px}
 </head>
 <body>
 <div class="pagina">
-  <header class="marca"><b>Proctoria</b><span>Versão 0.8 de demonstração</span></header>
+  <header class="marca"><b>Proctoria</b><span>Versão 0.8 de demonstração</span><a href="testes.html" style="margin-left:auto;font:600 15px/1 var(--titulo);color:var(--laranja)">Área de testes</a></header>
 
   <!-- INÍCIO -->
   <main id="v-inicio">
@@ -88,7 +88,7 @@ details>div{display:grid;gap:14px;margin-top:14px}
       <ol class="percurso">
         <li><div><strong>Verificação do ambiente</strong>Câmera física, microfone com captação de voz, fotos de identidade, prova de vida, monitor único, tela inteira compartilhada e registro da área de trabalho.</div></li>
         <li><div><strong>Calibragem do olhar</strong>Nove pontos na tela, em cerca de vinte segundos.</div></li>
-        <li><div><strong>Prova monitorada</strong>Cópia, colagem e atalhos bloqueados. Olhar, rosto e voz geram advertência na tela e, se a condição continuar, suspensão. Saída da janela ou da tela cheia suspende de imediato. Na terceira suspensão, a prova fica bloqueada até a liberação do administrador.</div></li>
+        <li><div><strong>Prova monitorada</strong>Cópia, colagem e atalhos bloqueados. Rosto ausente e outra pessoa na imagem geram advertência e, se a condição continuar, suspensão. Olhar fora da tela e voz ficam registrados para análise, sem interromper a prova. Saída da janela ou da tela cheia suspende de imediato. Na terceira suspensão, a prova fica bloqueada até a liberação do administrador.</div></li>
         <li><div><strong>Auditoria</strong>Registro completo da sessão, evidências de cada ocorrência, gravação integral da tela e da câmera e relatório formal de ocorrências.</div></li>
       </ol>
       <div class="ficha" id="lancador">
@@ -116,11 +116,8 @@ details>div{display:grid;gap:14px;margin-top:14px}
               </label>
             </div>
             <div class="linha-campos">
-              <label class="campo" for="aviso-seg">Olhar ou rosto fora: segundos até a advertência
+              <label class="campo" for="aviso-seg">Olhar, cabeça ou rosto fora: segundos até o aviso
                 <input type="number" id="aviso-seg" min="0.5" max="30" step="0.5" value="2">
-              </label>
-              <label class="campo" for="susp-seg">Segundos adicionais até a suspensão
-                <input type="number" id="susp-seg" min="1" max="60" step="0.5" value="4">
               </label>
             </div>
             <label class="campo" for="sem-pausas">Sem pausas: segundos de rosto fora da imagem que invalidam a prova (0 para desligar)
@@ -240,12 +237,12 @@ details>div{display:grid;gap:14px;margin-top:14px}
     $("aviso-inicio").hidden = true;
     respostas = QUESTOES.map(function () { return null; }); atual = 0;
     $("iniciar").disabled = true;
-    var avisoSeg = Math.max(0.5, parseFloat($("aviso-seg").value) || 2), suspSeg = Math.max(1, parseFloat($("susp-seg").value) || 4);
+    var avisoSeg = Math.max(0.5, parseFloat($("aviso-seg").value) || 2);
     var codigo = $("codigo").value.trim();
-    (codigo ? Proctoria.resumoSHA256(codigo) : Promise.resolve(null)).then(function (hash) { iniciarSessao(nome, hash, avisoSeg, suspSeg); });
+    (codigo ? Proctoria.resumoSHA256(codigo) : Promise.resolve(null)).then(function (hash) { iniciarSessao(nome, hash, avisoSeg); });
   });
 
-  function iniciarSessao(nome, hash, avisoSeg, suspSeg) {
+  function iniciarSessao(nome, hash, avisoSeg) {
     sessao = Proctoria.criar({
       aluno: { id: nome.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "participante", nome: nome },
       prova: { id: "demonstracao-v01", titulo: "Prova ilustrativa da demonstração" },
@@ -254,8 +251,8 @@ details>div{display:grid;gap:14px;margin-top:14px}
         limiteSuspensoes: Math.max(0, parseInt($("limite").value, 10) || 0),
         liberacaoHash: hash,
         sinais: {
-          olhar_fora: { avisoSeg: avisoSeg, suspensaoSeg: suspSeg },
-          cabeca_fora: { avisoSeg: avisoSeg, suspensaoSeg: suspSeg },
+          olhar_fora: { avisoSeg: avisoSeg },
+          cabeca_fora: { avisoSeg: avisoSeg },
           rosto_ausente: { avisoSeg: avisoSeg }
         },
         exigirTelaInteiraCompartilhada: $("r-tela-inteira").checked,

@@ -281,6 +281,11 @@
       rotuloEntrada.hidden = !faltam.length || !!opcoes.buscarGravacao;
       botaoRemoto.hidden = !faltam.length || !opcoes.buscarGravacao;
     }
+    function posicaoNaGravacao(t) {   // "trecho 2, 12:34" no arquivo da tela (ou da câmera, quando a tela não foi gravada)
+      var gr = registro.gravacoes || {}, segs = (gr.tela && gr.tela.length ? gr.tela : gr.camera) || [], i = -1;
+      segs.forEach(function (s, k) { if (t >= s.inicioT && (s.fimT === null || s.fimT === undefined || t <= s.fimT)) i = k; });
+      return i < 0 ? null : (segs.length > 1 ? "trecho " + (i + 1) + ", " : "") + relogio(t - segs[i].inicioT);
+    }
     function irPara(t) {
       ["tela", "camera"].forEach(function (tipo) {
         var g = segmentoDe(tipo, t);
@@ -338,10 +343,12 @@
         var bt = el("button", { class: "ppn-tempo", type: "button", text: quando });
         if (naProva) { bt.title = "Abrir as gravações neste instante"; bt.addEventListener("click", function () { irPara(ev.t); videos.tela.scrollIntoView({ block: "center", behavior: "smooth" }); }); }
         else bt.disabled = true;
+        var pos = naProva ? posicaoNaGravacao(ev.t) : null;
         var topo = el("div", { class: "ppn-topo" }, [
           el("span", { class: "ppn-selo ppn-c-" + ev.classe, text: ev.classe === "revisao" && !(ev.dados && ev.dados.advertencia) ? "Para revisão" : (SELOS[ev.classe] || ev.classe) }),
           el("strong", { text: ev.titulo }),
-          ev.duracaoMs !== undefined ? el("span", { class: "ppn-dur", text: "Duração: " + duracao(ev.duracaoMs) }) : null
+          ev.duracaoMs !== undefined ? el("span", { class: "ppn-dur", text: "Duração: " + duracao(ev.duracaoMs) }) : null,
+          pos ? el("span", { class: "ppn-dur", text: "Na gravação: " + pos }) : null
         ]);
         var corpo = el("div", null, [topo]);
         var det = ev.detalhe || "";

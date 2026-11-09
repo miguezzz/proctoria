@@ -14,6 +14,7 @@ Fiscalização de prova on-line: engine para navegador, servidor, página da pro
 | `painel.js` | Painel de auditoria: linha do tempo, gravações, ocorrências com evidências, decisão e parecer |
 | `relatorio.js` | Relatório formal de ocorrências da sessão, pronto para salvar em PDF |
 | `index.html` | Demonstração sem servidor, com prova ilustrativa |
+| `testes.html` | Área de testes: cada recurso da engine testado separadamente, com o resultado no próprio módulo |
 | `prova.html` | Página da prova ligada ao servidor |
 | `admin.html` | Módulo de administração |
 | `servidor/index.js` | Servidor: Cloudflare Worker, banco em Durable Object (SQLite) e arquivos em R2 |
@@ -79,7 +80,7 @@ A cada alteração enviada ao repositório, a Cloudflare publica de novo.
 | Linhas gravadas no banco | 100 mil por dia | 50 milhões por mês incluídas |
 | Arquivos (R2) | 10 GB incluídos; acima disso, US$ 0,015 por GB ao mês | Igual |
 
-Uma turma de 40 alunos em prova de 1 hora consome cerca de 70 mil requisições, de 80 mil a 120 mil linhas gravadas e perto de 11 GB de gravação. No plano gratuito, ao atingir um limite diário a Cloudflare interrompe o serviço até a virada do dia: ele atende ao piloto e a turmas de até cerca de 25 participantes por dia, e turmas maiores pedem o plano pago.
+Uma turma de 40 alunos em prova de 1 hora consome cerca de 70 mil requisições, de 80 mil a 120 mil linhas gravadas e perto de 5 GB de gravação (tela até 1920 px a 1 quadro por segundo; câmera gravada em 640 x 360 a 10 quadros por segundo). No plano gratuito, ao atingir um limite diário a Cloudflare interrompe o serviço até a virada do dia: ele atende ao piloto e a turmas de até cerca de 25 participantes por dia, e turmas maiores pedem o plano pago.
 
 ### Teto de gasto
 
@@ -102,7 +103,7 @@ printf 'ADMIN_SENHA=uma-senha-local\n' > .dev.vars
 npm run local
 ```
 
-A administração abre em `http://127.0.0.1:8787/admin`.
+A administração abre em `http://127.0.0.1:8787/admin` e a área de testes em `http://127.0.0.1:8787/testes`.
 
 ## Uso da engine em outra página
 

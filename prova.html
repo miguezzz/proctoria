@@ -224,7 +224,8 @@
     var r = d.prova.resumoRegras, ul = $("e-regras"); ul.textContent = "";
     ul.appendChild(item(EM_SEB ? "A prova ocorre no Safe Exam Browser, com câmera, microfone e tela gravados do início ao fim."
       : "A prova ocorre em tela cheia, com câmera, microfone e tela inteira gravados do início ao fim."));
-    ul.appendChild(item("Olhar fora da tela, rosto ausente, outra pessoa na imagem e som de voz geram advertência e, se a condição continuar, suspensão."));
+    ul.appendChild(item("Rosto ausente e outra pessoa na imagem geram advertência e, se a condição continuar, suspensão."));
+    ul.appendChild(item("Olhar fora da tela e som de voz no ambiente não interrompem a prova: ficam registrados e são analisados pelo administrador."));
     ul.appendChild(item(EM_SEB ? "Encerrar o Safe Exam Browser antes da entrega interrompe a sessão, e a interrupção conta como suspensão."
       : "Sair da janela, minimizar, redimensionar ou interromper o compartilhamento suspende a prova de imediato."));
     if (r.limiteSuspensoes > 0) ul.appendChild(item("Na suspensão de número " + r.limiteSuspensoes + ", a prova fica bloqueada até a liberação do administrador."));

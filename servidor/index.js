@@ -346,7 +346,7 @@ export class Banco extends DurableObject {
       limiteSuspensoes: r.limiteSuspensoes, identidade: !!r.identidade, identidadeDocumento: r.identidadeDocumento !== false, provaDeVida: r.provaDeVida, varreduraAmbiente: !!r.varreduraAmbiente,
       semPausasSeg: r.semPausasSeg || 0, gravarTela: !!r.gravarTela, gravarCamera: !!r.gravarCamera, exigirTelaInteiraCompartilhada: !!r.exigirTelaInteiraCompartilhada,
       trechoGravacaoMs: 10000, mostrarSinais: !!r.mostrarSinais, mostrarOlhar: !!r.mostrarOlhar,
-      sinais: { olhar_fora: { avisoSeg: r.avisoSeg, suspensaoSeg: r.suspensaoSeg }, cabeca_fora: { avisoSeg: r.avisoSeg, suspensaoSeg: r.suspensaoSeg }, rosto_ausente: { avisoSeg: Math.min(r.avisoSeg, Math.max(0.5, (r.ausenciaSeg || 10) - 1)), suspensaoSeg: Math.max(1, (r.ausenciaSeg || 10) - r.avisoSeg) } }   // sem pausas desligado: a tolerância leva à suspensão
+      sinais: { olhar_fora: { avisoSeg: r.avisoSeg }, cabeca_fora: { avisoSeg: r.avisoSeg }, rosto_ausente: { avisoSeg: Math.min(r.avisoSeg, Math.max(0.5, (r.ausenciaSeg || 10) - 1)), suspensaoSeg: Math.max(1, (r.ausenciaSeg || 10) - r.avisoSeg) } }   // sem pausas desligado: a tolerância leva à suspensão
     };
   }
 

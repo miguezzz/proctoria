@@ -1,0 +1,722 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Proctoria: área de testes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600&family=Poppins:wght@500;600&display=swap">
+<link rel="stylesheet" href="app.css">
+<style>
+.secao{margin-top:44px}
+.secao>h2{border-bottom:1px solid var(--linha);padding-bottom:8px}
+.modulos{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,470px),1fr));gap:18px;margin-top:18px;align-items:start}
+.modulo{background:var(--papel);border:1px solid var(--linha);border-left:6px solid var(--linha);border-radius:6px;padding:20px 22px;display:grid;gap:12px;min-width:0}
+.modulo[data-estado=rodando]{border-left-color:var(--laranja-vivo)}
+.modulo[data-estado=ok]{border-left-color:var(--positivo)}
+.modulo[data-estado=atencao]{border-left-color:var(--atencao)}
+.modulo[data-estado=falha]{border-left-color:var(--critico)}
+.modulo header{display:flex;gap:12px;align-items:baseline;justify-content:space-between}
+.modulo h3{margin:0}
+.modulo .nota{margin:0;font-size:16px;line-height:1.5}
+.vivo{font:500 16px/1.45 var(--titulo);background:var(--fundo);border-radius:4px;padding:12px 14px;display:grid;gap:10px}
+.medidor-voz{height:10px;border-radius:5px;background:rgba(27,21,18,.12);overflow:hidden}
+.medidor-voz i{display:block;height:100%;width:0;background:var(--ouro);transition:width .08s linear}
+.medidor-voz i.voz{background:var(--laranja-vivo)}
+.resultado{display:grid;gap:14px;border-top:1px solid var(--linha);padding-top:14px;min-width:0}
+.resumo{font:500 17px/1.45 var(--titulo);margin:0}
+.resultado .dados{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.resultado .dados dd{font-size:17px;font-variant-numeric:tabular-nums}
+.checagens,.ocorrencias{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-size:16px;line-height:1.4}
+.checagens li{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px}
+.checagens li::before{content:"✓";font-weight:600;color:var(--positivo)}
+.checagens li[data-ok=nao]::before{content:"✗";color:var(--critico)}
+.checagens li[data-ok=falta]::before{content:"–";color:var(--tinta2)}
+.ocorrencias li{padding-left:10px;border-left:3px solid var(--ouro)}
+.ocorrencias small,.registro small{display:block;color:var(--tinta2)}
+.midias{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.midias figure{margin:0;display:grid;gap:4px;align-content:start}
+.midias img,.midias video{width:100%;border-radius:4px;background:#0d0a08;display:block}
+.midias audio{width:100%}
+.midias figcaption{font:500 13px/1.35 var(--titulo);color:var(--tinta2)}
+.espelho{transform:scaleX(-1)}
+.registro summary{cursor:pointer;font:600 15px/1.3 var(--titulo)}
+.registro ol{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:6px;font-size:15px;line-height:1.4}
+.registro li{display:grid;grid-template-columns:52px minmax(0,1fr);gap:10px;padding-left:8px;border-left:3px solid var(--linha)}
+.registro li[data-classe=revisao]{border-left-color:var(--atencao)}
+.registro li[data-classe=suspensao]{border-left-color:var(--critico)}
+.registro li[data-classe=bloqueio]{border-left-color:var(--neutro)}
+.registro i{font-style:normal;font-variant-numeric:tabular-nums;color:var(--tinta2)}
+.quando{font:500 13px/1.2 var(--titulo);color:var(--tinta2);margin:0}
+.alvo-bloqueio{display:grid;gap:10px;font:400 17px/1.5 var(--texto)}
+.alvo-bloqueio p{margin:0}
+/* acima da camada de suspensão da engine, para concluir o teste a qualquer momento */
+.barra-teste{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:2147483500;width:min(780px,calc(100vw - 32px));display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;background:var(--tinta);color:var(--fundo);border-radius:6px;padding:12px 14px 12px 18px;box-shadow:0 8px 28px rgba(27,21,18,.35);font:500 15px/1.4 var(--titulo)}
+.barra-teste div{flex:1 1 320px;min-width:0}
+.barra-teste b{display:block;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--ouro)}
+.barra-teste .tempo{font-variant-numeric:tabular-nums}
+.barra-teste .botao{background:var(--laranja-vivo);color:var(--tinta)}
+</style>
+</head>
+<body>
+<div class="pagina larga">
+  <header class="marca"><b>Proctoria</b><span>Área de testes</span>
+    <nav><button class="botao sec menor" type="button" id="desligar" hidden>Desligar câmera e microfone</button></nav>
+  </header>
+  <h1>Área de testes</h1>
+  <p class="entrada">Cada módulo testa um recurso da engine separadamente e mostra o resultado no próprio cartão. Os testes rodam a engine de verdade (proctoria.js) neste computador: nada vai para o servidor e nada fica guardado depois que a página fecha.</p>
+  <p class="nota">Use o Google Chrome ou o Microsoft Edge. A câmera e o microfone abrem no primeiro módulo que precisar deles e ficam ligados até você clicar em Desligar ou fechar a página. O compartilhamento de tela feito no módulo próprio vale para Gravação, Desempenho e Janela.</p>
+  <div id="modulos"></div>
+</div>
+
+<script src="proctoria.js"></script>
+<script>
+(function () {
+  "use strict";
+  var P = Proctoria, s = null, proto = null, ocupado = false;
+  var botaoDesligar = document.getElementById("desligar");
+
+  /* Regras da sessão de teste: as exigências de janela e tela cheia ficam desligadas e o módulo Janela as liga.
+     Código de liberação do bloqueio: 0000. */
+  var REGRAS = {
+    exigirTelaCheia: false, exigirMonitorUnico: false, exigirJanelaMaximizada: false,
+    gravarTela: false, gravarCamera: false, bloquearAcoes: false, capturaPeriodicaSeg: 0,
+    limiteSuspensoes: 3, liberacaoHash: "9af15b336e6a9619928537df30b2e6a2376569fcf9d7e773eccede65606529a0"
+  };
+  var MIMES = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4;codecs=avc1,mp4a.40.2", "video/mp4"];
+
+  /* ---------------------------- utilidades ---------------------------- */
+
+  function h(tag, attrs, filhos) {
+    var n = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) {
+      if (k === "class") n.className = attrs[k];
+      else if (k === "text") n.textContent = attrs[k];
+      else if (k.slice(0, 2) === "on") n.addEventListener(k.slice(2), attrs[k]);
+      else n.setAttribute(k, attrs[k]);
+    });
+    (filhos || []).forEach(function (f) { if (f !== null && f !== undefined) n.appendChild(typeof f === "object" ? f : document.createTextNode(String(f))); });
+    return n;
+  }
+  function num(x, casas) { return Number(x).toFixed(casas || 0).replace(".", ","); }
+  function seg(ms) { return num(ms / 1000, 1) + " s"; }
+  function relogio(ms) { var t = Math.floor(ms / 1000); return Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0"); }
+  function esperar(ms) { return new Promise(function (ok) { setTimeout(ok, ms); }); }
+  async function ate(cond, ms) {
+    var fim = performance.now() + ms;
+    while (!cond()) { if (performance.now() > fim) return false; await esperar(100); }
+    return true;
+  }
+  function soma(v) { return v.reduce(function (a, b) { return a + b; }, 0); }
+  function media(v) { return v.length ? soma(v) / v.length : 0; }
+  function p95(v) { if (!v.length) return 0; var o = v.slice().sort(function (a, b) { return a - b; }); return o[Math.min(o.length - 1, Math.floor(o.length * 0.95))]; }
+  function kb(bytes) { return num(bytes / 1024) + " KB"; }
+  function limitar(x) { return Math.max(0, Math.min(1, x)); }
+  function formato(m) { var p = /video\/(\w+)(?:;codecs=(.+))?/.exec(m || ""); return p ? p[1].toUpperCase() + (p[2] ? " (" + p[2].split(",").join(" + ") + ")" : "") : m || "nenhum"; }
+  function figura(midia, legenda) { return h("figure", null, [midia, h("figcaption", { text: legenda })]); }
+  function imagem(src) {
+    return new Promise(function (ok) { var i = new Image(); i.onload = i.onerror = function () { ok(i); }; i.src = src; });
+  }
+  function regraTexto(c) {
+    var x = function (n) { return num(n, n % 1 ? 1 : 0) + " s"; };
+    if (!(c.suspensaoSeg > 0) && !(c.reincidencia > 0)) return "Regra atual: aviso de ocorrência registrada depois de " + x(c.avisoSeg) + ", sem advertência nem suspensão.";
+    return "Regra atual: advertência depois de " + x(c.avisoSeg) + (c.suspensaoSeg > 0 ? "; suspensão se continuar por mais " + x(c.suspensaoSeg) : "") +
+      (c.reincidencia > 0 ? "; suspensão também na " + c.reincidencia + "ª advertência em " + P.regrasPadrao.reincidenciaJanelaMin + " minutos" : "") + ".";
+  }
+
+  /* --------------------- sessão de teste e prova -------------------- */
+
+  /* Uma sessão da engine para a página toda: câmera, microfone e detector abrem uma vez e servem a todos os módulos. */
+  function sessao() {
+    if (s) return s;
+    s = P.criar({ aluno: { id: "teste", nome: "Área de testes" }, prova: { id: "area-de-testes", titulo: "Área de testes" }, regras: REGRAS });
+    proto = Object.getPrototypeOf(s);
+    s._fase = "preparo";
+    s._itens = {};   // a engine escreve as mensagens da verificação nestes itens; a página as lê para explicar a falha
+    ["camera", "tela"].forEach(function (k) { s._itens[k] = h("li", null, [h("span", { class: "pct-estado" }), h("small")]); });
+    s._aviso = h("p");
+    s._camVideo = h("video"); s._camVideo.muted = true; s._camVideo.playsInline = true;
+    s._vozAcumuladaMs = 0;
+    return s;
+  }
+  function dica(item) { return s._itens[item].querySelector("small").textContent; }
+  function telaViva() { return s._trilhaViva(s._telaStream, "video", true); }
+
+  async function garantirMidia(ui) {
+    if (s._trilhaViva(s._camStream, "video")) return;
+    ui.vivo("Autorize a câmera e o microfone na janela do navegador.");
+    if (!(await s._abrirMidia())) throw new Error(dica("camera") || "Câmera e microfone não ativados.");
+    await ate(function () { return s._camVideo.videoWidth > 0; }, 5000);
+  }
+  async function garantirDetector(ui) {
+    await garantirMidia(ui);
+    if (s._detector) return;
+    ui.vivo("Carregando o detector facial.");
+    await ate(function () { return s._detector || s._erroDetector; }, 60000);
+    if (!s._detector) throw new Error("O detector facial não foi carregado. Verifique a conexão com a internet e recarregue a página.");
+  }
+
+  /* Põe a sessão em fase de prova com as partes pedidas. Contagens zeradas a cada módulo. */
+  function entrarProva(op) {
+    op = op || {};
+    s._fase = "prova"; s._inicioProvaT = s._agora(); s._inicioProvaRelogio = performance.now();
+    s._ciclo = 0; s._ocorrencias = 0; s._nAdvertencias = 0; s._avisos = {};
+    s._semTela = !telaViva();   // sem compartilhamento, a retomada não pede a tela
+    if (op.sinais !== false) s._armarSinais();
+    if (op.vigilancia) s._armarVigilancia();
+    if (op.bloqueios) s._armarBloqueios();
+    if (op.painel !== false) { s.regras.mostrarSinais = true; s._montarSinais(); }
+  }
+  function sairProva() {
+    var agora = performance.now();
+    Object.keys(s._cond || {}).forEach(function (k) { s._cond[k].fechar(agora); });
+    if (s._vozEvento) s._fecharVoz();
+    s._ouvintes.forEach(function (o) { o[0].removeEventListener(o[1], o[2], o[3]); });
+    s._ouvintes = [];
+    s._temporizadores.forEach(clearInterval); s._temporizadores = [];
+    clearInterval(s._susTick);
+    if (s._canal) { try { s._canal.close(); } catch (e) {} s._canal = null; }
+    ["_camada", "_sinaisCaixa", "_mira", "_advCaixa"].forEach(function (k) { if (s[k]) { s[k].remove(); s[k] = null; } });
+    s._feed = null; s._sinaisVideo = null; s._advAtivas = {}; s._suspensao = null; s._cond = null; s._cursorFora = null;
+    document.documentElement.classList.remove("pct-com-sinais");
+    s._fase = "preparo";
+  }
+
+  function medirDetector() {
+    var d = s._detector, orig = d.detectForVideo, tempos = [];
+    d.detectForVideo = function () { var a = performance.now(); try { return orig.apply(d, arguments); } finally { tempos.push(performance.now() - a); } };
+    return { parar: function () { d.detectForVideo = orig; return tempos; } };
+  }
+
+  /* Barra fixa com o tempo do teste e o botão de concluir; resolve no clique ou ao fim de maxMs. */
+  function barra(titulo, texto, maxMs) {
+    return new Promise(function (ok) {
+      var t0 = performance.now(), tempo = h("span", { class: "tempo", text: "0:00" }), id;
+      var fim = function () { clearInterval(id); caixa.remove(); ok(); };
+      var caixa = h("div", { class: "barra-teste", role: "region", "aria-label": "Teste em andamento" }, [
+        h("div", null, [h("b", { text: titulo }), h("span", { text: texto })]), tempo,
+        h("button", { class: "botao menor", type: "button", text: "Concluir teste", onclick: fim })
+      ]);
+      document.body.appendChild(caixa);
+      id = setInterval(function () { var p = performance.now() - t0; tempo.textContent = relogio(p); if (p >= maxMs) fim(); }, 250);
+    });
+  }
+
+  function criarUi(m) {
+    return {
+      vivo: function (texto, filhos) {
+        m.vivo.hidden = false; m.vivo.textContent = "";
+        if (texto) m.vivo.appendChild(h("span", { text: texto }));
+        (filhos || []).forEach(function (f) { m.vivo.appendChild(f); });
+      },
+      contagem: async function (n, texto) { for (var i = n; i > 0; i--) { this.vivo(texto + " (" + i + ")"); await esperar(1000); } }
+    };
+  }
+
+  async function seletorCameras(m) {
+    var cams = (await navigator.mediaDevices.enumerateDevices()).filter(function (d) { return d.kind === "videoinput" && d.label; });
+    if (cams.length < 2) return null;
+    var atual = ((s._camStream && s._camStream.getVideoTracks()[0]) || {}).label;
+    var sel = h("select", null, cams.map(function (d) { var o = h("option", { value: d.deviceId, text: d.label }); o.selected = d.label === atual; return o; }));
+    sel.addEventListener("change", function () { s._cameraEscolhida = sel.value; executar(m); });
+    return h("label", { class: "campo" }, ["Testar com outra câmera", sel]);
+  }
+
+  /* ------------------------- sinais da prova ------------------------- */
+
+  function moduloSinal(tipo, titulo, como) {
+    return {
+      secao: "Sinais durante a prova", titulo: titulo,
+      descricao: como + " " + regraTexto(P.regrasPadrao.sinais[tipo]),
+      rodar: async function (ui, ini) {
+        await (tipo === "voz" ? garantirMidia(ui) : garantirDetector(ui));
+        if (tipo === "olhar_fora" && !s._calib.modelo)
+          return { estado: "falha", resumo: "Sem calibragem válida a engine não avalia o olhar. Rode antes o módulo Calibragem do olhar." };
+        entrarProva();
+        ui.vivo("Teste em andamento. O painel no canto da tela mostra as leituras ao vivo.");
+        await barra(titulo, como, 180000);
+        sairProva();
+        await esperar(600);   // o áudio da evidência de voz fica pronto logo depois da parada
+        return resultadoSinal(tipo, ini);
+      }
+    };
+  }
+
+  function resultadoSinal(tipo, ini) {
+    var evs = s._eventos.slice(ini.n), c = s.regras.sinais[tipo], soRegistro = !(c.suspensaoSeg > 0) && !(c.reincidencia > 0);
+    var ocorr = evs.filter(function (e) { return e.classe === "revisao" && e.tipo === tipo; });
+    var susp = evs.filter(function (e) { return e.classe === "suspensao" && e.tipo === tipo; });
+    var reinc = evs.filter(function (e) { return e.classe === "suspensao" && e.tipo === "reincidencia"; });
+    var adv = ocorr.filter(function (e) { return e.dados && e.dados.advertencia; });
+    var lista = h("ul", { class: "ocorrencias" }, ocorr.map(function (e) {
+      var p = ["Aos " + seg(e.t - ini.t)];
+      if (e.duracaoMs) p.push("durou " + seg(e.duracaoMs));
+      if (e.detectadoT) p.push("aviso " + seg(e.detectadoT - e.t) + " depois do início");
+      p.push(e.dados && e.dados.advertencia ? "advertência " + e.dados.advertencia : "só registro");
+      var sp = susp.filter(function (x) { return x.t >= e.t && x.t <= e.t + (e.duracaoMs || 0) + 1000; })[0];
+      if (sp) p.push("suspensão aos " + seg(sp.t - ini.t));
+      return h("li", null, [p.join(" · "), e.detalhe ? h("small", { text: e.detalhe }) : null]);
+    }));
+    var provas = [], primeira = ocorr[0];
+    if (primeira && primeira.evidencias) {
+      if (primeira.evidencias.camera) provas.push(figura(h("img", { src: primeira.evidencias.camera, alt: "Câmera no momento da ocorrência" }), "Câmera na 1ª ocorrência"));
+      if (primeira.evidencias.tela) provas.push(figura(h("img", { src: primeira.evidencias.tela, alt: "Tela no momento da ocorrência" }), "Tela na 1ª ocorrência"));
+    }
+    ocorr.slice(0, 3).forEach(function (e, i) {
+      if (e.evidencias && e.evidencias.audio) provas.push(figura(h("audio", { controls: "", src: e.evidencias.audio }), "Áudio da ocorrência " + (i + 1)));
+    });
+    var outros = evs.filter(function (e) { return (e.classe === "revisao" || e.classe === "suspensao") && e.tipo !== tipo; });
+    var r = {
+      dados: [["Ocorrências", ocorr.length], ["Advertências", soRegistro ? "nenhuma (só registro)" : adv.length], ["Suspensões", susp.length + (reinc.length ? " + " + reinc.length + " por reincidência" : "")]],
+      extra: [ocorr.length ? lista : null, provas.length ? h("div", { class: "midias" }, provas) : null,
+        outros.length ? h("p", { class: "nota", text: "Outros sinais no período: " + outros.map(function (e) { return e.titulo.toLowerCase(); }).join("; ") + "." }) : null]
+    };
+    if (soRegistro && susp.length) { r.estado = "falha"; r.resumo = "O sinal suspendeu a prova, mas a regra é só registrar."; }
+    else if (!ocorr.length) { r.estado = "atencao"; r.resumo = "Nenhuma ocorrência deste sinal no período. Repita mantendo a condição por mais tempo."; }
+    else {
+      r.estado = "ok";
+      r.resumo = soRegistro ? "Ocorrência registrada sem advertência nem suspensão, como prevê a regra."
+        : "Detectado: " + adv.length + (adv.length === 1 ? " advertência" : " advertências") + " e " + (susp.length + reinc.length) + (susp.length + reinc.length === 1 ? " suspensão." : " suspensões.");
+    }
+    return r;
+  }
+
+  /* ------------------------------ módulos ----------------------------- */
+
+  var MODULOS = [
+    {
+      secao: "Equipamento", titulo: "Navegador",
+      descricao: "Confere se o navegador tem os recursos que a prova usa. É instantâneo.",
+      rodar: async function () {
+        var md = navigator.mediaDevices || {}, mime = MIMES.filter(function (m) { return window.MediaRecorder && MediaRecorder.isTypeSupported(m); })[0];
+        var essenciais = [
+          ["Câmera e microfone", !!md.getUserMedia], ["Compartilhamento de tela", !!md.getDisplayMedia],
+          ["Gravação de vídeo", !!window.MediaRecorder], ["Tela cheia", !!document.documentElement.requestFullscreen],
+          ["Detecção de monitor adicional", "isExtended" in screen]
+        ];
+        var extras = [
+          ["Análise de áudio", !!(window.AudioContext || window.webkitAudioContext)],
+          ["Detector na placa de vídeo (WebGL 2)", !!h("canvas").getContext("webgl2")],
+          ["Retenção do teclado na tela cheia", !!(navigator.keyboard && navigator.keyboard.lock)],
+          ["Aviso de prova aberta em outra aba", !!window.BroadcastChannel]
+        ];
+        var ok = essenciais.every(function (x) { return x[1]; }), tudo = ok && extras.every(function (x) { return x[1]; });
+        var ua = navigator.userAgent, nav = (/Edg\/(\d+)/.exec(ua) || [])[1] ? "Edge " + /Edg\/(\d+)/.exec(ua)[1] : (/Chrome\/(\d+)/.exec(ua) || [])[1] ? "Chrome " + /Chrome\/(\d+)/.exec(ua)[1] : ua;
+        return {
+          estado: tudo ? "ok" : ok ? "atencao" : "falha",
+          resumo: !ok ? "Falta recurso essencial: a prova não abre neste navegador." : tudo ? "Navegador compatível com a prova." : "Compatível, mas sem um recurso opcional (marcado com traço).",
+          dados: [["Navegador", nav], ["Núcleos do processador", navigator.hardwareConcurrency || "não informado"],
+            ["Memória", navigator.deviceMemory ? (navigator.deviceMemory >= 8 ? "8 GB ou mais" : navigator.deviceMemory + " GB") : "não informada"],
+            ["Tela", screen.width + " × " + screen.height + (devicePixelRatio > 1 ? " (densidade " + num(devicePixelRatio, 1) + ")" : "")],
+            ["Monitores", screen.isExtended ? "mais de um" : "um"], ["Formato de gravação", formato(mime)]],
+          extra: [h("ul", { class: "checagens" }, essenciais.concat(extras).map(function (x, i) {
+            return h("li", { "data-ok": x[1] ? "sim" : i < essenciais.length ? "nao" : "falta" }, [x[0] + (i >= essenciais.length ? " (opcional)" : "")]);
+          }))]
+        };
+      }
+    },
+    {
+      secao: "Equipamento", titulo: "Câmera e microfone",
+      descricao: "Abre a câmera e o microfone como na verificação da prova. A engine recusa câmeras virtuais (OBS, ManyCam e semelhantes).",
+      rodar: async function (ui, ini, m) {
+        var t0 = performance.now();
+        ui.vivo("Autorize a câmera e o microfone na janela do navegador.");
+        var ok = await s._abrirMidia(), seletor = await seletorCameras(m).catch(function () { return null; });
+        if (!ok) return { estado: "falha", resumo: dica("camera") || "Câmera e microfone não ativados.", extra: [seletor] };
+        await ate(function () { return s._camVideo.videoWidth > 0; }, 5000);
+        var v = s._camStream.getVideoTracks()[0], a = s._camStream.getAudioTracks()[0], st = v.getSettings();
+        var lista = await navigator.mediaDevices.enumerateDevices();
+        var conta = function (k) { return lista.filter(function (d) { return d.kind === k; }).length; };
+        var previa = h("video", { class: "espelho", autoplay: "", playsinline: "" });
+        previa.muted = true; previa.srcObject = s._camStream;
+        var baixa = (st.height || 0) < 480;
+        return {
+          estado: baixa ? "atencao" : "ok",
+          resumo: baixa ? "Câmera ativa, mas em resolução baixa: a foto do documento pode ficar ilegível." : "Câmera e microfone ativos.",
+          dados: [["Câmera", v.label], ["Resolução entregue", st.width + " × " + st.height], ["Quadros por segundo", num(st.frameRate || 0)],
+            ["Microfone", a ? a.label : "nenhum"], ["Câmeras no computador", conta("videoinput")], ["Microfones no computador", conta("audioinput")],
+            ["Tempo até a imagem", seg(performance.now() - t0)]],
+          extra: [h("div", { class: "midias" }, [figura(previa, "Imagem ao vivo, espelhada como na verificação")]), seletor]
+        };
+      }
+    },
+    {
+      secao: "Equipamento", titulo: "Verificação do microfone",
+      descricao: "Mede o ruído de fundo e espera a frase em voz alta, como na verificação. Fique em silêncio no começo e fale quando pedir.",
+      rodar: async function (ui) {
+        await garantirMidia(ui);
+        var v = s._voz, r = s.regras;
+        if (!v) return { estado: "falha", resumo: "A análise de áudio não foi iniciada neste navegador." };
+        v.piso = null; v.amostrasPiso = []; s._micOk = false; s._vozAcumuladaMs = 0;
+        var barraVoz = h("i"), medidor = h("div", { class: "medidor-voz", "aria-hidden": "true" }, [barraVoz]);
+        var pico = null, mudo = 0, leituras = 0, t0 = performance.now(), tOk = null;
+        while (performance.now() - t0 < 20000 && !s._micOk) {
+          await esperar(100);
+          leituras++; if (v.nivel < -110) mudo++;
+          var acima = v.piso === null ? 0 : v.nivel - v.piso;
+          if (v.piso !== null) pico = pico === null ? acima : Math.max(pico, acima);
+          barraVoz.style.width = limitar(acima / 40) * 100 + "%"; barraVoz.className = v.ativa ? "voz" : "";
+          ui.vivo(v.piso === null ? "Silêncio: medindo o ruído de fundo." : "Diga em voz alta: confirmo que realizo esta prova sem auxílio.", [medidor]);
+        }
+        if (s._micOk) tOk = performance.now() - t0;
+        var a = s._camStream.getAudioTracks()[0];
+        var dados = [["Microfone", a ? a.label : "nenhum"], ["Ruído de fundo", v.piso === null ? "sem leitura" : num(v.piso) + " dB"],
+          ["Pico da fala", pico === null ? "sem leitura" : "+" + num(pico) + " dB sobre o ruído"], ["Limiar de voz", "+" + r.vozLimiarDb + " dB"],
+          ["Voz confirmada", tOk === null ? "não" : "em " + seg(tOk)]];
+        if (s._micOk) return { estado: "ok", resumo: "O microfone captou voz: a verificação da prova seria liberada.", dados: dados };
+        if (mudo > leituras * 0.8) return { estado: "falha", resumo: "Microfone sem sinal (abaixo de −110 dB): ele pode estar silenciado no sistema ou na tecla do notebook.", dados: dados };
+        return { estado: "falha", dados: dados, resumo: pico === null || pico < r.vozLimiarDb
+          ? "A fala não passou do limiar: aproxime-se do microfone ou aumente o volume de entrada do sistema."
+          : "Houve som, mas sem o padrão de voz por 0,6 s seguidos. Fale de forma contínua, sem pausas." };
+      }
+    },
+    {
+      secao: "Equipamento", titulo: "Compartilhamento de tela",
+      descricao: "Pede a tela inteira e registra a imagem da área de trabalho, como antes da prova. Janela ou aba são recusadas.",
+      rodar: async function (ui) {
+        if (s._telaStream) s._telaStream.getTracks().forEach(function (t) { t.stop(); });
+        ui.vivo("Na janela do navegador, escolha Tela inteira.");
+        if (!(await s._abrirTela())) return { estado: "falha", resumo: dica("tela") || "Compartilhamento não autorizado." };
+        var st = s._telaStream.getVideoTracks()[0].getSettings();
+        ui.vivo("Registrando a imagem da área de trabalho.");
+        await ate(function () { return s._telaVideo.videoWidth > 0; }, 5000);
+        await esperar(1200);   // a tela vem a 1 quadro por segundo: espera um quadro inteiro
+        var n = s._eventos.length, foto = s._fotografar("ambiente", "Área de trabalho registrada (teste)", null, s._telaVideo, 1600) ? s._eventos[n].evidencias.tela : null;
+        var img = foto ? await imagem(foto) : null;
+        var previa = h("video", { autoplay: "", playsinline: "" });
+        previa.muted = true; previa.srcObject = s._telaStream;
+        var acima = (st.width || 0) > 1920 || (st.height || 0) > 1080 || (st.frameRate || 0) > 2;
+        return {
+          estado: acima ? "atencao" : "ok",
+          resumo: acima ? "Captura acima do limite de 1920 × 1080 a 2 quadros por segundo: a gravação pesa mais no computador." : "Tela inteira compartilhada dentro dos limites da gravação.",
+          dados: [["Superfície", { monitor: "Tela inteira", window: "Janela", browser: "Aba" }[st.displaySurface] || st.displaySurface || "não informada"],
+            ["Resolução capturada", st.width + " × " + st.height], ["Quadros por segundo", num(st.frameRate || 0, 1) + " (limite 2)"],
+            ["Monitor adicional", screen.isExtended ? "sim" : "não"],
+            ["Imagem registrada", img ? img.naturalWidth + " × " + img.naturalHeight + " · " + kb(foto.length * 0.75) : "não registrada"]],
+          extra: [h("div", { class: "midias" }, [figura(previa, "Captura ao vivo"),
+            img ? figura(img, "Imagem que vai para a auditoria: confira se o texto está legível") : null])]
+        };
+      }
+    },
+    {
+      secao: "Verificação de entrada", titulo: "Detector facial",
+      descricao: "Carrega o detector e mede, por 6 segundos, quanto tempo cada leitura leva neste computador. Olhe para a tela normalmente.",
+      rodar: async function (ui) {
+        await garantirDetector(ui);
+        var med = medirDetector(), rostos = [], p0 = s._piscadas, t0 = performance.now();
+        while (performance.now() - t0 < 6000) {
+          await esperar(150);
+          var x = s._sinais; rostos.push(x.rostos || 0);
+          ui.vivo("Rostos: " + (x.rostos || 0) + " · cabeça: " + (x.rostos ? Math.round(x.yaw) + "° / " + Math.round(x.pitch) + "°" : "sem leitura") + " · piscadas: " + (s._piscadas - p0));
+        }
+        var t = med.parar(), um = rostos.filter(function (r) { return r === 1; }).length / Math.max(1, rostos.length), ms = media(t);
+        var det = s._eventos.filter(function (e) { return e.tipo === "detector_ativo"; }).pop();
+        var mid = det && s._eventos.filter(function (e) { return e.tipo === "midia_ativa" && e.t <= det.t; }).pop();
+        var dados = [["Processamento", s._delegado === "GPU" ? "Placa de vídeo (GPU)" : "Processador (CPU)"],
+          ["Carga do detector", det && mid ? seg(det.t - mid.t) : "não medida"],
+          ["Tempo por leitura", num(ms, 1) + " ms (95% abaixo de " + num(p95(t)) + " ms)"],
+          ["Leituras por segundo", num(t.length / 6, 1) + " na verificação"],
+          ["Na prova (5 por segundo)", "cerca de " + num(ms * 0.5, 1) + "% do tempo da página"],
+          ["Um rosto na imagem", num(um * 100) + "% das leituras"], ["Piscadas", s._piscadas - p0]];
+        if (um < 0.8) return { estado: "atencao", resumo: "O rosto não foi identificado em boa parte das leituras: confira a iluminação de frente e a posição da câmera.", dados: dados };
+        if (ms > 60) return { estado: "atencao", resumo: "Detector lento neste computador: cada leitura passa de 60 ms.", dados: dados };
+        return { estado: "ok", resumo: "Detector funcionando" + (s._delegado === "GPU" ? " na placa de vídeo." : " no processador."), dados: dados };
+      }
+    },
+    {
+      secao: "Verificação de entrada", titulo: "Fotos de identidade",
+      descricao: "Tira a foto do rosto e, 5 segundos depois, a do documento, com a mesma resolução da verificação.",
+      rodar: async function (ui) {
+        await garantirMidia(ui);
+        await ui.contagem(3, "Olhe para a câmera, com o rosto inteiro visível e bem iluminado.");
+        var rostos = s._detector ? s._sinais.rostos || 0 : null, n1 = s._eventos.length;
+        var f1 = s._fotografar("identidade_rosto", "Foto do rosto registrada (teste)") ? s._eventos[n1].evidencias.camera : null;
+        await ui.contagem(5, "Aproxime da câmera um documento com foto, com os dados legíveis.");
+        var n2 = s._eventos.length, f2 = s._fotografar("identidade_documento", "Foto do documento registrada (teste)") ? s._eventos[n2].evidencias.camera : null;
+        if (!f1 || !f2) return { estado: "falha", resumo: "A câmera não entregou imagem para a foto." };
+        var i1 = await imagem(f1), i2 = await imagem(f2), tam = function (i, f) { return i.naturalWidth + " × " + i.naturalHeight + " · " + kb(f.length * 0.75); };
+        return {
+          estado: rostos === 1 ? "ok" : "atencao",
+          resumo: rostos === 1 ? "Fotos registradas. Confira se o documento ficou legível." : rostos === null ? "Fotos registradas. O detector não estava carregado para conferir o rosto." : "Fotos registradas, mas sem exatamente um rosto na primeira: na prova, o botão só libera com um rosto identificado.",
+          dados: [["Foto do rosto", tam(i1, f1)], ["Foto do documento", tam(i2, f2)], ["Rostos na foto", rostos === null ? "não conferido" : rostos]],
+          extra: [h("div", { class: "midias" }, [figura(i1, "Rosto"), figura(i2, "Documento: nome e número precisam estar legíveis")])]
+        };
+      }
+    },
+    {
+      secao: "Verificação de entrada", titulo: "Prova de vida",
+      descricao: "Sorteia a ordem dos dois movimentos (piscar duas vezes e voltar o rosto para um lado) e espera até 45 segundos.",
+      rodar: async function (ui) {
+        await garantirDetector(ui);
+        var t0 = performance.now(), primeiro = null, TXT = { piscar: "Pisque os olhos duas vezes.", voltar: "Volte o rosto para um dos lados e retorne ao centro." };
+        var v = s._vida = { ordem: Math.random() < 0.5 ? ["piscar", "voltar"] : ["voltar", "piscar"], i: 0, inicio: t0,
+          piscadasBase: s._piscadas, yawBase: null, virou: false, expirada: false, ok: false };   // mesmo objeto que a verificação monta
+        while (!v.ok && !v.expirada) {
+          await esperar(100);
+          if (v.i > 0 && primeiro === null) primeiro = performance.now() - t0;
+          var i = Math.min(v.i, 1);
+          ui.vivo("Movimento " + (i + 1) + " de 2: " + TXT[v.ordem[i]] + " (" + Math.max(0, Math.ceil((45000 - (performance.now() - t0)) / 1000)) + " s)");
+        }
+        var ordem = v.ordem.map(function (x) { return x === "piscar" ? "piscar" : "voltar o rosto"; }).join(", depois ");
+        s._vida = null;
+        if (v.ok) return { estado: "ok", resumo: "Prova de vida concluída.", dados: [["Ordem sorteada", ordem], ["Primeiro movimento", seg(primeiro || 0)], ["Concluída em", seg(performance.now() - t0)]] };
+        return { estado: "falha", resumo: "Os movimentos não foram identificados em 45 segundos. Na prova, com a regra registrar, o participante segue e a falta fica registrada.",
+          dados: [["Ordem sorteada", ordem], ["Movimentos identificados", v.i + " de 2"]] };
+      }
+    },
+    {
+      secao: "Verificação de entrada", titulo: "Calibragem do olhar",
+      descricao: "Abre a calibragem de nove pontos em tela cheia. Se ela for válida, um ponto mostra na tela para onde a engine estima o seu olhar.",
+      rodar: async function (ui) {
+        try { await document.documentElement.requestFullscreen(); } catch (e) {}
+        await garantirDetector(ui);
+        var cancelar, feito = new Promise(function (ok) {
+          s._concluirCalibragem = function (pontos) { delete s._concluirCalibragem; proto._concluirCalibragem.call(s, pontos); ok(pontos); };
+          cancelar = function () { delete s._concluirCalibragem; ok(null); };
+        });
+        s._montarCalibragem();
+        s._camada.querySelector(".pct-acoes").appendChild(h("button", { class: "pct-botao pct-sec", type: "button", text: "Cancelar o teste", onclick: cancelar }));
+        ui.vivo("Calibragem em andamento.");
+        var pontos = await feito;
+        if (s._camada) { s._camada.remove(); s._camada = null; }
+        var c = s._calib, ok = pontos && c.desvio <= s.regras.calibragemDesvioMax;
+        if (ok) {
+          var mira = h("div", { class: "pct-mira", "aria-hidden": "true" });
+          mira.hidden = true; document.body.appendChild(mira);
+          var id = setInterval(function () {
+            var g = s._sinais;
+            mira.hidden = g.gx === undefined || !g.rostos;
+            if (mira.hidden) return;
+            mira.style.left = limitar(g.gx) * 100 + "%"; mira.style.top = limitar(g.gy) * 100 + "%";
+            mira.style.background = g.olharFora ? "rgba(168,50,31,.55)" : ""; mira.style.borderColor = g.olharFora ? "#A8321F" : "";
+          }, 100);
+          await barra("Calibragem do olhar", "O ponto segue o olhar estimado. Olhe para os cantos e depois para fora da tela: o ponto fica vermelho quando o olhar sai dela.", 120000);
+          clearInterval(id); mira.remove();
+        }
+        if (document.fullscreenElement) document.exitFullscreen().catch(function () {});
+        if (!pontos) return { estado: "falha", resumo: "Teste cancelado antes da calibragem." };
+        var validos = pontos.filter(function (p) { return p.amostras.length >= 4; }).length;
+        return {
+          estado: ok ? "ok" : "falha",
+          resumo: ok ? "Calibragem válida: o sinal Olhar fora da tela passa a ser avaliado." : "Calibragem insuficiente. Na prova, depois de duas tentativas o participante segue com o monitoramento só pela posição da cabeça.",
+          dados: [["Desvio médio", num(Math.min(c.desvio, 1) * 100) + "% da tela (limite " + num(s.regras.calibragemDesvioMax * 100) + "%)"],
+            ["Pontos com leitura", validos + " de 9"], ["Tentativa", c.tentativas],
+            ["Referência da cabeça", Math.round(c.yaw0) + "° / " + Math.round(c.pitch0) + "°"]]
+        };
+      }
+    },
+    {
+      secao: "Gravação e desempenho", titulo: "Gravação",
+      descricao: "Grava 15 segundos da câmera e, se estiver compartilhada, da tela, com as configurações da prova. Mostra os vídeos, a resolução e o volume por hora.",
+      rodar: async function (ui, ini, m) {
+        await garantirMidia(ui);
+        var tipos = telaViva() ? ["camera", "tela"] : ["camera"];
+        tipos.forEach(function (t) { s._gravacoes[t] = []; s._iniciarGravacao(t); });
+        await ui.contagem(15, "Gravando " + (tipos.length > 1 ? "a câmera e a tela" : "a câmera") + ". Fale algo e mexa na tela para conferir o som e a legibilidade.");
+        await Promise.all(tipos.map(function (t) { return s._pararGravacao(t); }));
+        var dados = [], midias = [], total = 0, falhou = false;
+        for (var i = 0; i < tipos.length; i++) {
+          var t = tipos[i], g = s._gravacoes[t][0], nome = t === "tela" ? "Tela" : "Câmera";
+          if (!g || !g.bytes) { dados.push([nome, "não gravou"]); falhou = true; continue; }
+          var dur = Math.max(1000, g.fimT - g.inicioT) / 1000, url = URL.createObjectURL(new Blob(g.partes, { type: g.mime.split(";")[0] }));
+          m.urls.push(url);
+          var vid = h("video", { controls: "", playsinline: "", preload: "metadata", src: url });
+          var res = await new Promise(function (ok) { vid.onloadedmetadata = function () { ok(vid.videoWidth + " × " + vid.videoHeight); }; vid.onerror = function () { ok("não decodificado"); }; setTimeout(function () { ok("não medida"); }, 4000); });
+          var mbh = g.bytes / dur * 3600 / 1e6; total += mbh;
+          dados.push([nome, res + " · " + num(g.bytes * 8 / dur / 1000) + " kbps · " + num(mbh) + " MB/h"]);
+          midias.push(figura(vid, nome + ": " + kb(g.bytes) + " em " + num(dur, 1).replace(",0", "") + " s"));
+          s._gravacoes[t] = [];
+        }
+        dados.push(["Por hora de prova", num(total) + " MB"], ["Formato", formato(MIMES.filter(function (x) { return MediaRecorder.isTypeSupported(x); })[0])]);
+        return {
+          estado: falhou ? "falha" : tipos.length < 2 ? "atencao" : "ok",
+          resumo: falhou ? "Uma das gravações não gerou arquivo." : tipos.length < 2 ? "Câmera gravada. A tela não estava compartilhada: rode o módulo Compartilhamento de tela e repita para gravar as duas."
+            : "Câmera e tela gravadas. Confira nos vídeos o som e a legibilidade do texto da tela.",
+          dados: dados, extra: [h("div", { class: "midias" }, midias)]
+        };
+      }
+    },
+    {
+      secao: "Gravação e desempenho", titulo: "Desempenho na prova",
+      descricao: "Liga por 30 segundos tudo o que a prova liga (detector a 5 leituras por segundo, análise de voz e gravação) e mede o peso na página. Para a CPU total, abra o Gerenciador de tarefas do navegador (Shift+Esc) durante o teste.",
+      rodar: async function (ui) {
+        await garantirDetector(ui);
+        var tipos = telaViva() ? ["camera", "tela"] : ["camera"];
+        entrarProva({ painel: false });
+        tipos.forEach(function (t) { s._gravacoes[t] = []; s._iniciarGravacao(t); });
+        var med = medirDetector(), atrasos = [], esperado = performance.now() + 50, longas = [], obs = null, quadros = 0, rodando = true;
+        var laco = setInterval(function () { var n = performance.now(); atrasos.push(Math.max(0, n - esperado)); esperado = n + 50; }, 50);
+        try { obs = new PerformanceObserver(function (l) { l.getEntries().forEach(function (e) { longas.push(e.duration); }); }); obs.observe({ type: "longtask" }); } catch (e) { obs = null; }
+        requestAnimationFrame(function quadro() { if (!rodando) return; quadros++; requestAnimationFrame(quadro); });
+        var mem0 = performance.memory ? performance.memory.usedJSHeapSize : null, t0 = performance.now();
+        try {
+          await ui.contagem(30, "Medindo com a prova em andamento. Fique diante da câmera, em silêncio, com esta aba visível.");
+        } finally {
+          var dur = (performance.now() - t0) / 1000, t = med.parar();
+          rodando = false; clearInterval(laco); if (obs) obs.disconnect();
+          await Promise.all(tipos.map(function (x) { return s._pararGravacao(x); }));
+          sairProva();
+        }
+        var gravacao = tipos.map(function (x) {
+          var g = s._gravacoes[x][0], d = g ? Math.max(1000, g.fimT - g.inicioT) / 1000 : 1;
+          s._gravacoes[x] = [];
+          return (x === "tela" ? "tela " : "câmera ") + (g ? num(g.bytes * 8 / d / 1000) + " kbps" : "sem dados");
+        }).join(" · ");
+        var ms = media(t), ocupacao = soma(t) / dur / 10, fps = quadros / dur, atrasoMax = atrasos.length ? Math.max.apply(null, atrasos) : 0;
+        var mem = mem0 === null ? null : (performance.memory.usedJSHeapSize - mem0) / 1e6;
+        var problemas = [];
+        if (ocupacao > 20) problemas.push("o detector ocupa " + num(ocupacao) + "% do tempo da página");
+        if (atrasoMax > 250) problemas.push("a página travou por até " + num(atrasoMax) + " ms");
+        if (fps < 30) problemas.push("a página caiu para " + num(fps) + " quadros por segundo");
+        return {
+          estado: problemas.length ? "atencao" : "ok",
+          resumo: problemas.length ? "Pesado neste computador: " + problemas.join("; ") + "." : "Leve neste computador: a prova roda sem travar a página.",
+          dados: [["Detector por leitura", num(ms, 1) + " ms (95% abaixo de " + num(p95(t)) + " ms)"], ["Leituras por segundo", num(t.length / dur, 1)],
+            ["Página ocupada pelo detector", num(ocupacao, 1) + "% do tempo"], ["Atraso da página", "média " + num(media(atrasos)) + " ms, máximo " + num(atrasoMax) + " ms"],
+            ["Tarefas longas (acima de 50 ms)", obs ? longas.length + (longas.length ? ", somando " + num(soma(longas)) + " ms" : "") : "não medidas neste navegador"],
+            ["Quadros da página", num(fps) + " por segundo"], ["Gravação", gravacao],
+            ["Memória do script", mem === null ? "não medida" : (mem >= 0 ? "+" : "") + num(mem, 1) + " MB"], ["Núcleos do processador", navigator.hardwareConcurrency || "não informado"]]
+        };
+      }
+    },
+    moduloSinal("rosto_ausente", "Rosto ausente", "Saia da frente da câmera por uns 6 segundos e volte. Para seguir, clique em Retomar a prova na tela de suspensão."),
+    moduloSinal("mais_de_um_rosto", "Mais de um rosto", "Chame outra pessoa para a imagem, ou mostre à câmera uma foto de rosto no celular, por uns 5 segundos."),
+    moduloSinal("cabeca_fora", "Cabeça fora da tela", "Vire a cabeça para o lado, ou abaixe para o teclado, por uns 3 segundos."),
+    moduloSinal("olhar_fora", "Olhar fora da tela", "Precisa da calibragem do olhar. Com a cabeça parada, olhe para fora da tela por uns 3 segundos."),
+    moduloSinal("voz", "Voz no ambiente", "Fale, ou toque um áudio de conversa perto do microfone, por uns 3 segundos. O trecho de áudio fica como evidência."),
+    {
+      secao: "Regras objetivas", titulo: "Janela, tela cheia e dispositivos",
+      descricao: "Liga as regras que suspendem na hora: troca de janela, saída da tela cheia, janela minimizada ou redimensionada, compartilhamento parado, câmera ou microfone desconectados e monitor adicional. Na 3ª suspensão a prova é bloqueada; o código de liberação nos testes é 0000.",
+      rodar: async function (ui, ini) {
+        var chaves = ["exigirTelaCheia", "exigirMonitorUnico", "exigirJanelaMaximizada"], salvas = {};
+        chaves.forEach(function (k) { salvas[k] = s.regras[k]; s.regras[k] = true; });
+        try {
+          await s._entrarTelaCheia().catch(function () {});
+          await garantirMidia(ui);
+          entrarProva({ vigilancia: true });
+          s._conferirCondicoesIniciais();
+          ui.vivo("Teste em andamento.");
+          await barra("Janela, tela cheia e dispositivos", "Uma ação por vez, retomando a prova entre elas: troque de janela (Alt+Tab ou Cmd+Tab), saia da tela cheia (segure Esc), minimize a janela, pare o compartilhamento, desconecte a câmera. Código de liberação: 0000.", 900000);
+        } finally {
+          if (s._fase === "prova") sairProva();
+          chaves.forEach(function (k) { s.regras[k] = salvas[k]; });
+          if (navigator.keyboard && navigator.keyboard.unlock) { try { navigator.keyboard.unlock(); } catch (e) {} }
+          if (document.fullscreenElement) document.exitFullscreen().catch(function () {});
+        }
+        var evs = s._eventos.slice(ini.n), conta = function (tipo) { return evs.filter(function (e) { return e.tipo === tipo; }).length; };
+        var susp = evs.filter(function (e) { return e.classe === "suspensao" && e.tipo !== "bloqueio_admin"; });
+        return {
+          estado: susp.length ? "ok" : "atencao",
+          resumo: susp.length ? susp.length + (susp.length === 1 ? " suspensão registrada." : " suspensões registradas.") : "Nenhuma suspensão no período. Repita fazendo uma das ações listadas.",
+          dados: [["Suspensões", susp.length], ["Bloqueios", conta("bloqueio_admin")], ["Liberações", conta("liberacao")], ["Retomadas", conta("retomada")]],
+          extra: [susp.length ? h("ul", { class: "ocorrencias" }, susp.map(function (e) {
+            return h("li", null, ["Aos " + seg(e.t - ini.t) + " · " + e.titulo + (e.duracaoMs ? " · suspensa por " + seg(e.duracaoMs) : ""), e.detalhe ? h("small", { text: e.detalhe }) : null]);
+          })) : null]
+        };
+      }
+    },
+    {
+      secao: "Regras objetivas", titulo: "Teclado e área de transferência",
+      descricao: "Liga os bloqueios da prova: cópia, colagem, menu do botão direito, impressão e atalhos de teclado. Cada tentativa fica registrada.",
+      rodar: async function (ui, ini) {
+        sessao();
+        entrarProva({ bloqueios: true, sinais: false, painel: false });
+        ui.vivo(null, [h("div", { class: "alvo-bloqueio" }, [
+          h("p", { text: "Texto de exemplo da questão: tente selecionar e copiar este trecho." }),
+          h("label", { class: "campo" }, ["Campo de resposta: tente colar aqui", h("textarea", { rows: "3" })])
+        ])]);
+        await barra("Teclado e área de transferência", "Tente copiar o texto, colar no campo, abrir o menu do botão direito, imprimir (Ctrl/Cmd+P), recarregar (Ctrl/Cmd+R), F12 e a tecla de captura de tela.", 900000);
+        sairProva();
+        var evs = s._eventos.slice(ini.n).filter(function (e) { return e.classe === "bloqueio"; });
+        var vezes = soma(evs.map(function (e) { return (e.dados && e.dados.vezes) || 1; }));
+        return {
+          estado: evs.length ? "ok" : "atencao",
+          resumo: evs.length ? vezes + (vezes === 1 ? " tentativa bloqueada e registrada." : " tentativas bloqueadas e registradas.") : "Nenhuma tentativa no período.",
+          extra: [evs.length ? h("ul", { class: "ocorrencias" }, evs.map(function (e) {
+            return h("li", null, ["Aos " + seg(e.t - ini.t) + " · " + e.titulo + ((e.dados && e.dados.vezes) > 1 ? " · " + e.dados.vezes + " vezes seguidas" : "")]);
+          })) : null]
+        };
+      }
+    }
+  ];
+
+  /* ---------------------------- execução ----------------------------- */
+
+  var ESTADOS = { ok: ["positivo", "Funcionou"], atencao: ["atencao", "Com ressalvas"], falha: ["critico", "Falhou"] };
+  var CLASSES = { sistema: "Sistema", revisao: "Para análise", suspensao: "Suspensão", bloqueio: "Ação bloqueada", atividade: "Atividade" };
+
+  function travar() {
+    MODULOS.forEach(function (m) { m.botao.disabled = ocupado; });
+    botaoDesligar.hidden = !(s && s._camStream);
+    botaoDesligar.disabled = ocupado;
+  }
+
+  async function executar(m) {
+    if (ocupado) return;
+    ocupado = true; travar();
+    m.urls.forEach(URL.revokeObjectURL); m.urls = [];
+    m.raiz.setAttribute("data-estado", "rodando"); m.selo.className = "selo"; m.selo.textContent = "Em teste";
+    m.resultado.hidden = true; m.vivo.hidden = true;
+    sessao();
+    var ini = { n: s._eventos.length, t: s._agora() }, r;
+    try { r = await m.rodar(criarUi(m), ini, m); }
+    catch (e) {
+      r = { estado: "falha", resumo: String((e && e.message) || e) };
+      if (s && s._fase === "prova") { try { sairProva(); } catch (x) {} }
+    }
+    m.vivo.hidden = true;
+    mostrar(m, r, ini);
+    ocupado = false; travar();
+  }
+
+  function mostrar(m, r, ini) {
+    var e = ESTADOS[r.estado] || ESTADOS.falha, evs = s ? s._eventos.slice(ini.n) : [];
+    m.raiz.setAttribute("data-estado", r.estado); m.selo.className = "selo " + e[0]; m.selo.textContent = e[1];
+    var filhos = [h("p", { class: "resumo", text: r.resumo })];
+    if (r.dados && r.dados.length) filhos.push(h("dl", { class: "dados" }, r.dados.map(function (d) { return h("div", null, [h("dt", { text: d[0] }), h("dd", { text: String(d[1]) })]); })));
+    (r.extra || []).forEach(function (x) { if (x) filhos.push(x); });
+    if (evs.length) filhos.push(h("details", { class: "registro" }, [
+      h("summary", { text: "Registro da engine neste teste (" + evs.length + ")" }),
+      h("ol", null, evs.map(function (ev) {
+        return h("li", { "data-classe": ev.classe }, [h("i", { text: seg(Math.max(0, ev.t - ini.t)) }),
+          h("span", null, [(CLASSES[ev.classe] || ev.classe) + ": " + ev.titulo, ev.detalhe ? h("small", { text: ev.detalhe }) : null])]);
+      }))
+    ]));
+    filhos.push(h("p", { class: "quando", text: "Testado às " + new Date().toLocaleTimeString("pt-BR") }));
+    m.resultado.textContent = "";
+    filhos.forEach(function (f) { m.resultado.appendChild(f); });
+    m.resultado.hidden = false;
+    m.botao.textContent = "Testar novamente";
+  }
+
+  function montar() {
+    var raiz = document.getElementById("modulos"), atual = null, grade = null;
+    MODULOS.forEach(function (m) {
+      if (m.secao !== atual) {
+        atual = m.secao; grade = h("div", { class: "modulos" });
+        raiz.appendChild(h("section", { class: "secao" }, [h("h2", { text: atual }), grade]));
+      }
+      m.urls = [];
+      m.selo = h("span", { class: "selo vazio", text: "Não testado" });
+      m.botao = h("button", { class: "botao menor", type: "button", text: "Testar", onclick: function () { executar(m); } });
+      m.vivo = h("div", { class: "vivo", "aria-live": "polite", hidden: "" });
+      m.resultado = h("div", { class: "resultado", hidden: "" });
+      m.raiz = h("article", { class: "modulo", "data-estado": "pendente" }, [
+        h("header", null, [h("h3", { text: m.titulo }), m.selo]), h("p", { class: "nota", text: m.descricao }),
+        h("div", { class: "acoes" }, [m.botao]), m.vivo, m.resultado
+      ]);
+      grade.appendChild(m.raiz);
+    });
+  }
+
+  botaoDesligar.addEventListener("click", function () {
+    if (ocupado || !s) return;
+    s._desligar(); s = null; travar();
+  });
+  montar();
+})();
+</script>
+</body>
+</html>

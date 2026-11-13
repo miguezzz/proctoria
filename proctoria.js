@@ -25,6 +25,7 @@
     trechoGravacaoMs: 4000,
     limiteSuspensoes: 3,          // na suspensão deste número a prova fica bloqueada até a liberação do administrador; 0 = sem bloqueio
     liberacaoHash: null,          // SHA-256 do código de liberação (Proctoria.resumoSHA256); nulo = liberação apenas por sessao.liberar()
+    avisoSuspensao: "",           // texto a mais no quadro de suspensão, como a consequência das suspensões para a prova
     /* Cada sinal: advertência depois de avisoSeg contínuos; suspensão se persistir por mais suspensaoSeg;
        suspensão também na advertência de número "reincidencia" dentro de reincidenciaJanelaMin.
        suspensaoSeg e reincidencia em 0: o sinal só fica registrado para revisão, sem advertência nem suspensão. */
@@ -81,6 +82,8 @@
     piscar: "Pisque os olhos duas vezes.",
     voltar: "Volte o rosto para um dos lados e retorne ao centro."
   };
+  /* Frase do teste do microfone. O reconhecimento confere as palavras, sem exigir a ordem. */
+  var FRASE_MICROFONE = "confirmo que realizo esta prova sem auxílio";
   function cameraVirtual(rotulo) {
     return /\bobs\b|virtual|manycam|snap ?camera|xsplit|droidcam|iriun|epoccam|\bcamo\b|mmhmm|\bndi\b|vcam|e2esoft|splitcam|camtwist|chromacam|youcam|altercam/i.test(rotulo || "");
   }
@@ -118,6 +121,17 @@
   }
 
   function limitar(x, a, b) { return Math.max(a, Math.min(b, x)); }
+  function mimeAudio() {
+    return ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].filter(function (m) { return MediaRecorder.isTypeSupported(m); })[0] || "";
+  }
+  function palavras(texto) {
+    return String(texto || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean);
+  }
+  /* Fração das palavras da frase do microfone presentes no texto reconhecido, de 0 a 1. */
+  function coberturaFrase(texto) {
+    var ditas = palavras(texto), alvo = palavras(FRASE_MICROFONE);
+    return alvo.filter(function (p) { return ditas.indexOf(p) >= 0; }).length / alvo.length;
+  }
   function arred(x, casas) { var p = Math.pow(10, casas || 0); return Math.round(x * p) / p; }
   /* A página não consegue impedir que a janela seja minimizada ou redimensionada: ela confere o tamanho,
      restaura quando o navegador permite (janela aberta por script) e suspende a prova. */
@@ -471,7 +485,7 @@
       ["rosto", "Um rosto identificado na imagem"],
       ["microfone", "Microfone ativo e captando voz"]
     ];
-    this._passos = ["midia"];
+    this._passos = ["midia", "fala"];
     if (r.identidade) {
       definicoes.push(["identidade", r.identidadeDocumento ? "Identidade registrada: rosto e documento" : "Identidade registrada: foto do rosto"]);
       this._passos.push("foto_rosto"); if (r.identidadeDocumento) this._passos.push("foto_documento");
@@ -547,7 +561,7 @@
 
     if (this.regras.exigirJanelaMaximizada) maximizarJanela();
     this._janelaOk = true;
-    this._vozAcumuladaMs = 0; this._rostoDesde = null;
+    this._fala = null; this._rostoDesde = null;
     this._tickVerif = setInterval(function () { eu._atualizarVerificacao(); }, 200);
     this._atualizarVerificacao();
   };
@@ -631,9 +645,13 @@
         var pct = v.piso === null ? 0 : limitar((v.nivel - v.piso) / 40, 0, 1) * 100;
         this._barraVoz.style.width = pct + "%";
         this._barraVoz.className = v.ativa ? "pct-voz" : "";
+        var f = this._fala;
         if (this._micOk) this._item("microfone", "conforme", "");
         else if (v.piso === null) this._item("microfone", "verificando", "Permaneça em silêncio por alguns segundos.");
-        else this._item("microfone", "verificando", "Diga em voz alta: confirmo que realizo esta prova sem auxílio.");
+        else if (f && f.gravando) this._item("microfone", "verificando", "Gravando. Diga: " + FRASE_MICROFONE + ".");
+        else if (f && f.reconhecendo) this._item("microfone", "verificando", "Reconhecendo a frase.");
+        else if (f && f.erro) this._item("microfone", "nao", f.erro);
+        else this._item("microfone", "pendente", "");
       }
     }
     if (this._telaStream) {
@@ -645,6 +663,18 @@
     }
     var e = this._etapa, vida = this._vida, texto = "";
     if (e === "midia") { b.textContent = "Ativar câmera e microfone"; b.disabled = !this._compativel || ocupado; texto = this._aviso.textContent; }
+    else if (e === "fala") {
+      var fala = this._fala, semPiso = !!this._voz && this._voz.piso === null;
+      if (fala && fala.gravando) {
+        b.textContent = "Concluir gravação"; b.disabled = ocupado;
+        texto = "Diga em voz alta: “" + FRASE_MICROFONE + "”. Depois clique em Concluir gravação.";
+      } else if (fala && fala.reconhecendo) { b.textContent = "Reconhecendo a frase"; b.disabled = true; }
+      else {
+        b.textContent = fala ? "Gravar novamente" : "Gravar a frase"; b.disabled = ocupado || semPiso;
+        texto = semPiso ? "Permaneça em silêncio por alguns segundos enquanto o ruído de fundo é medido."
+          : fala && fala.erro ? fala.erro : "Ao clicar, a gravação começa. Diga em voz alta: “" + FRASE_MICROFONE + "”.";
+      }
+    }
     else if (e === "foto_rosto") {
       b.textContent = "Registrar a foto do rosto"; b.disabled = ocupado || !this._rostoOk;
       this._item("identidade", "verificando", "");
@@ -702,6 +732,10 @@
     this._ocupado = true;
     var fim = function () { eu._ocupado = false; eu._atualizarVerificacao(); };
     if (e === "midia") this._abrirMidia().then(function (ok) { if (ok) eu._avancar(); }).then(fim, fim);
+    else if (e === "fala") {
+      if (this._fala && this._fala.gravando) this._concluirFala().then(fim, fim);
+      else { this._iniciarFala(); fim(); }
+    }
     else if (e === "foto_rosto") {
       if (this._fotografar("identidade_rosto", "Foto do rosto registrada")) { if (!r.identidadeDocumento) this._item("identidade", "conforme", ""); this._avancar(); }
       fim();
@@ -781,6 +815,93 @@
       if (this._itens) this._item("vida", "conforme", "");
       if (this._etapa === "vida") this._avancar();
     }
+  };
+
+  /* Teste do microfone: o participante grava a frase e conclui. A voz captada no trecho libera o item,
+     o reconhecimento de fala do navegador confere as palavras e o trecho fica como evidência.
+     Sem reconhecimento no navegador, ou depois de três tentativas sem a frase, a sessão segue
+     e o trecho fica para conferência na auditoria. */
+  Sessao.prototype._iniciarFala = function () {
+    var eu = this, f = { tentativa: ((this._fala && this._fala.tentativa) || 0) + 1, gravando: true, vozMs: 0, partes: [], reconhecimento: "indisponivel" };
+    this._fala = f;
+
+    // gravação do trecho
+    var mime = mimeAudio(), blocos = [];
+    try {
+      f.rec = new MediaRecorder(new MediaStream(this._camStream.getAudioTracks()), { mimeType: mime, audioBitsPerSecond: 24000 });
+      f.rec.ondataavailable = function (e) { if (e.data && e.data.size) blocos.push(e.data); };
+      f.trecho = new Promise(function (pronto) {
+        f.rec.onstop = function () {
+          if (!blocos.length) return pronto(null);
+          var leitor = new FileReader();
+          leitor.onload = function () { pronto(leitor.result); };
+          leitor.onerror = function () { pronto(null); };
+          leitor.readAsDataURL(new Blob(blocos, { type: /mp4/.test(mime) ? "audio/mp4" : "audio/webm" }));
+        };
+      });
+      f.rec.start();
+    } catch (e) { f.trecho = Promise.resolve(null); }
+
+    // reconhecimento em paralelo; o navegador encerra sozinho no silêncio, então ele recomeça enquanto grava
+    var Reconhecedor = global.SpeechRecognition || global.webkitSpeechRecognition;
+    if (Reconhecedor) {
+      try {
+        var rc = new Reconhecedor();
+        rc.lang = "pt-BR"; rc.continuous = true; rc.interimResults = false;
+        rc.onresult = function (e) {
+          for (var i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) f.partes.push(e.results[i][0].transcript);
+        };
+        rc.onerror = function (e) { if (e.error !== "no-speech" && e.error !== "aborted") f.reconhecimento = "indisponivel"; };
+        f.fimReconhecimento = new Promise(function (pronto) {
+          rc.onend = function () {
+            if (f.gravando && f.reconhecimento === "navegador") { try { rc.start(); return; } catch (e) {} }
+            pronto();
+          };
+        });
+        rc.start();
+        f.rc = rc; f.reconhecimento = "navegador";
+      } catch (e) { f.reconhecimento = "indisponivel"; }
+    }
+    f.limite = setTimeout(function () { if (eu._fala === f) eu._concluirFala(); }, 15000);
+  };
+
+  Sessao.prototype._concluirFala = function () {
+    var eu = this, f = this._fala;
+    if (!f || !f.gravando) return Promise.resolve();
+    f.gravando = false; f.reconhecendo = true;
+    clearTimeout(f.limite);
+    if (f.rec && f.rec.state !== "inactive") f.rec.stop();
+    if (f.rc) { try { f.rc.stop(); } catch (e) {} }
+    // o resultado final chega depois do stop; três segundos de folga se o fim não vier
+    var reconhecido = f.fimReconhecimento ? Promise.race([f.fimReconhecimento, new Promise(function (ok) { setTimeout(ok, 3000); })]) : null;
+    return Promise.all([f.trecho, reconhecido]).then(function (r) { eu._avaliarFala(f, r[0]); });
+  };
+
+  Sessao.prototype._avaliarFala = function (f, audio) {
+    f.reconhecendo = false;
+    var texto = f.partes.join(" ").trim(), cobertura = coberturaFrase(texto);
+    var semReconhecimento = f.reconhecimento === "indisponivel", reconhecida = cobertura >= 0.7;
+    if (this._voz && f.vozMs < 600) {
+      f.erro = "Não captamos sua voz. Aproxime-se do microfone, grave novamente e diga a frase em voz alta.";
+      return;
+    }
+    if (!reconhecida && !semReconhecimento && f.tentativa < 3) {
+      f.erro = texto ? "Entendemos: “" + texto + "”. Grave novamente e diga a frase completa."
+        : "Não entendemos a frase. Grave novamente, falando de forma clara e contínua.";
+      return;
+    }
+
+    // registra o resultado com o trecho gravado e a imagem da câmera
+    var detalhe = (semReconhecimento ? "Reconhecimento de fala indisponível neste navegador; o trecho gravado fica para conferência."
+      : "Texto reconhecido: “" + (texto || "nenhum") + "”.") + (this._voz ? " Ruído de fundo: " + arred(this._voz.piso, 0) + " dB." : "");
+    var dados = { frase: FRASE_MICROFONE, reconhecido: texto, cobertura: arred(cobertura, 2), tentativas: f.tentativa, reconhecimento: f.reconhecimento };
+    var ev = reconhecida || semReconhecimento
+      ? this._evento("sistema", "microfone_verificado", "Microfone verificado com a frase gravada", detalhe, { dados: dados })
+      : this._evento("revisao", "frase_nao_reconhecida", "Frase do microfone não reconhecida em " + f.tentativa + " tentativas", detalhe, { dados: dados });
+    ev.evidencias = this._evidencias();
+    if (audio) ev.evidencias.audio = audio;
+    f.erro = null; this._micOk = true;
+    this._avancar();
   };
 
   Sessao.prototype._abrirMidia = function () {
@@ -1043,13 +1164,7 @@
     var cobre = v.janela.length > 1 && instante - v.janela[0][0] >= r.vozJanelaSeg * 600;
     v.taxa = cobre ? v.janela.reduce(function (a, b) { return a + b[1]; }, 0) / v.janela.length : 0;
 
-    if (this._fase === "preparo" && !this._micOk) {
-      if (v.ativa) this._vozAcumuladaMs += passoMs;
-      if (this._vozAcumuladaMs >= 600) {
-        this._micOk = true;
-        this._evento("sistema", "microfone_verificado", "Microfone verificado com captação de voz", "Ruído de fundo: " + arred(v.piso, 0) + " dB");
-      }
-    }
+    if (this._fase === "preparo" && this._fala && this._fala.gravando && v.ativa) this._fala.vozMs += passoMs;
     if (this._fase !== "prova") return;
     var agora = instante;
     if (!this._suspensao) {
@@ -1085,7 +1200,7 @@
     this._vozEvento = reg;
     this._advertir("voz", ev);
     try {
-      var mimeVoz = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].filter(function (m) { return MediaRecorder.isTypeSupported(m); })[0] || "";
+      var mimeVoz = mimeAudio();
       var rec = new MediaRecorder(new MediaStream(this._camStream.getAudioTracks()), { mimeType: mimeVoz, audioBitsPerSecond: 24000 });
       var partes = [];
       rec.ondataavailable = function (e) { if (e.data && e.data.size) partes.push(e.data); };
@@ -1661,6 +1776,7 @@
           el("p", { class: "pct-sobre", text: contagem }),
           el("h2", { text: liberada ? "Prova liberada pelo administrador" : "Prova suspensa" }),
           el("p", { text: texto }),
+          this.regras.avisoSuspensao && !liberada ? el("p", { text: this.regras.avisoSuspensao }) : null,
           el("p", { class: "pct-aviso", text: "Ocorrência registrada:" }),
           this._susMotivos
         ]),
@@ -1849,6 +1965,7 @@
     this._temporizadores.forEach(function (t) { clearInterval(t); });
     this._temporizadores = [];
     clearInterval(this._tickVerif); clearInterval(this._susTick); clearInterval(this._audioId); clearTimeout(this._lacoId);
+    if (this._fala && this._fala.rc) { try { this._fala.rc.abort(); } catch (e) {} }
     if (this._canal) { try { this._canal.close(); } catch (e) {} }
     [this._camStream, this._telaStream].forEach(function (s) { if (s) s.getTracks().forEach(function (t) { t.stop(); }); });
     if (this._audioCtx) { try { this._audioCtx.close(); } catch (e) {} }
@@ -1935,6 +2052,7 @@
     regrasPadrao: REGRAS_PADRAO,
     criar: function (cfg) { return new Sessao(cfg); },
     resumoSHA256: resumoSHA256,
-    _interno: { ajustar: ajustar, prever: prever, desvioCalibragem: desvioCalibragem, Condicao: Condicao, caracteristicas: caracteristicas, cameraVirtual: cameraVirtual }
+    _interno: { ajustar: ajustar, prever: prever, desvioCalibragem: desvioCalibragem, Condicao: Condicao, caracteristicas: caracteristicas, cameraVirtual: cameraVirtual,
+      fraseMicrofone: FRASE_MICROFONE, coberturaFrase: coberturaFrase }
   };
 })(typeof window !== "undefined" ? window : globalThis);

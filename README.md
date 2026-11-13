@@ -141,6 +141,8 @@ Olhar, cabeça, rosto e voz seguem a mesma progressão, com tempos ajustáveis p
 2. **Suspensão** se a condição continuar por mais 4 s (para rosto ausente, vale a tolerância definida na prova), ou por reincidência de advertências do mesmo sinal em 5 minutos.
 3. **Bloqueio** na suspensão de número `limiteSuspensoes`: a retomada depende do administrador. A liberação reinicia a contagem.
 
+Com `limiteSuspensoes` em 0 não há bloqueio: as suspensões ficam só registradas. O texto de `avisoSuspensao` aparece no quadro de cada suspensão, por exemplo para dizer ao participante a consequência das suspensões.
+
 Saída da janela, janela minimizada, encoberta ou redimensionada, saída da tela cheia, compartilhamento interrompido, câmera ou microfone interrompidos, monitor adicional e queda da sessão suspendem de imediato.
 
 Com a regra **sem pausas** ligada, o rosto fora da imagem além da tolerância (10 s por padrão) encerra a prova como invalidada. As respostas são preservadas e a decisão final cabe ao administrador. Com a regra desligada, a mesma tolerância conduz à suspensão.
@@ -151,6 +153,7 @@ Com a regra **sem pausas** ligada, o rosto fora da imagem além da tolerância (
 - Um navegador comum detecta a saída da janela e reage, sem impedi-la, e não enxerga as outras abas nem os aplicativos abertos. O bloqueio efetivo de outros programas depende do Safe Exam Browser.
 - A conferência da Config Key confirma a configuração do Safe Exam Browser, sem atestar o programa em si: um participante com conhecimento técnico avançado poderia simulá-la. Câmera, gravações e registro seguem como segunda barreira.
 - Os limiares de olhar, cabeça, voz e prova de vida são valores iniciais e pedem ajuste com participantes reais.
+- No teste do microfone, o participante grava a frase "confirmo que realizo esta prova sem auxílio" e o trecho fica como evidência. A conferência das palavras usa o reconhecimento de fala do navegador: o Google Chrome envia o áudio aos servidores do Google, e o Microsoft Edge aos da Microsoft. Sem esse recurso no navegador, ou depois de três tentativas sem a frase, a sessão segue e o trecho fica para conferência na auditoria.
 - A conferência das fotos de identidade é feita pelo administrador, na auditoria. Não há comparação automática de rostos.
 - O relatório formal é uma página pronta para impressão; o PDF é gerado pela função de salvar em PDF do navegador.
 - O detector facial (MediaPipe Face Landmarker) é carregado de `cdn.jsdelivr.net` e `storage.googleapis.com`.

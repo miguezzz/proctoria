@@ -138,7 +138,6 @@
     ["camera", "tela"].forEach(function (k) { s._itens[k] = h("li", null, [h("span", { class: "pct-estado" }), h("small")]); });
     s._aviso = h("p");
     s._camVideo = h("video"); s._camVideo.muted = true; s._camVideo.playsInline = true;
-    s._vozAcumuladaMs = 0;
     return s;
   }
   function dica(item) { return s._itens[item].querySelector("small").textContent; }
@@ -344,32 +343,48 @@
     },
     {
       secao: "Equipamento", titulo: "Verificação do microfone",
-      descricao: "Mede o ruído de fundo e espera a frase em voz alta, como na verificação. Fique em silêncio no começo e fale quando pedir.",
-      rodar: async function (ui) {
+      descricao: "Grava a frase como na verificação: silêncio no começo, depois Gravar a frase, fala e Concluir gravação. O resultado traz o texto reconhecido e o trecho que fica na auditoria. Sem a frase, rode de novo: na 3ª tentativa a engine segue e registra para revisão.",
+      rodar: async function (ui, ini) {
         await garantirMidia(ui);
-        var v = s._voz, r = s.regras;
+        var v = s._voz, frase = P._interno.fraseMicrofone;
         if (!v) return { estado: "falha", resumo: "A análise de áudio não foi iniciada neste navegador." };
-        v.piso = null; v.amostrasPiso = []; s._micOk = false; s._vozAcumuladaMs = 0;
-        var barraVoz = h("i"), medidor = h("div", { class: "medidor-voz", "aria-hidden": "true" }, [barraVoz]);
-        var pico = null, mudo = 0, leituras = 0, t0 = performance.now(), tOk = null;
-        while (performance.now() - t0 < 20000 && !s._micOk) {
-          await esperar(100);
-          leituras++; if (v.nivel < -110) mudo++;
-          var acima = v.piso === null ? 0 : v.nivel - v.piso;
-          if (v.piso !== null) pico = pico === null ? acima : Math.max(pico, acima);
-          barraVoz.style.width = limitar(acima / 40) * 100 + "%"; barraVoz.className = v.ativa ? "voz" : "";
-          ui.vivo(v.piso === null ? "Silêncio: medindo o ruído de fundo." : "Diga em voz alta: confirmo que realizo esta prova sem auxílio.", [medidor]);
-        }
-        if (s._micOk) tOk = performance.now() - t0;
-        var a = s._camStream.getAudioTracks()[0];
-        var dados = [["Microfone", a ? a.label : "nenhum"], ["Ruído de fundo", v.piso === null ? "sem leitura" : num(v.piso) + " dB"],
-          ["Pico da fala", pico === null ? "sem leitura" : "+" + num(pico) + " dB sobre o ruído"], ["Limiar de voz", "+" + r.vozLimiarDb + " dB"],
-          ["Voz confirmada", tOk === null ? "não" : "em " + seg(tOk)]];
-        if (s._micOk) return { estado: "ok", resumo: "O microfone captou voz: a verificação da prova seria liberada.", dados: dados };
-        if (mudo > leituras * 0.8) return { estado: "falha", resumo: "Microfone sem sinal (abaixo de −110 dB): ele pode estar silenciado no sistema ou na tecla do notebook.", dados: dados };
-        return { estado: "falha", dados: dados, resumo: pico === null || pico < r.vozLimiarDb
-          ? "A fala não passou do limiar: aproxime-se do microfone ou aumente o volume de entrada do sistema."
-          : "Houve som, mas sem o padrão de voz por 0,6 s seguidos. Fale de forma contínua, sem pausas." };
+        // a contagem de tentativas segue entre execuções até a frase passar, como na verificação
+        if (s._micOk) s._fala = null;
+        s._micOk = false; s._fase = "preparo"; s._passos = ["fala"]; s._etapa = "fala";
+        v.piso = null; v.amostrasPiso = [];
+        var barraVoz = h("i"), medidor = h("div", { class: "medidor-voz", "aria-hidden": "true" }, [barraVoz]), clicou = null;
+        var botao = h("button", { class: "botao", type: "button", text: "Gravar a frase", onclick: function () { if (clicou) clicou(); } });
+        var clique = function () { return new Promise(function (ok) { clicou = ok; }); };
+        var medir = setInterval(function () {
+          barraVoz.style.width = limitar(v.piso === null ? 0 : (v.nivel - v.piso) / 40) * 100 + "%"; barraVoz.className = v.ativa ? "voz" : "";
+        }, 100);
+        try {
+          ui.vivo("Silêncio: medindo o ruído de fundo.", [medidor]);
+          if (!(await ate(function () { return v.piso !== null; }, 10000))) return { estado: "falha", resumo: "O ruído de fundo não foi medido: o microfone pode estar sem sinal." };
+          ui.vivo("Clique em Gravar a frase e diga: " + frase + ".", [medidor, botao]);
+          await clique();
+          s._iniciarFala();
+          botao.textContent = "Concluir gravação";
+          ui.vivo("Gravando. Diga: " + frase + ".", [medidor, botao]);
+          await Promise.race([clique(), ate(function () { return !s._fala.gravando; }, 16000)]);
+          ui.vivo("Reconhecendo a frase.", [medidor]);
+          await s._concluirFala();
+          await ate(function () { return !s._fala.reconhecendo; }, 5000);   // a parada automática dos 15 s conclui por conta própria
+        } finally { clearInterval(medir); }
+
+        var f = s._fala, texto = f.partes.join(" ").trim(), a = s._camStream.getAudioTracks()[0];
+        var ev = s._eventos.slice(ini.n).filter(function (e) { return e.tipo === "microfone_verificado" || e.tipo === "frase_nao_reconhecida"; }).pop();
+        var dados = [["Microfone", a ? a.label : "nenhum"], ["Ruído de fundo", num(v.piso) + " dB"], ["Voz captada", seg(f.vozMs)],
+          ["Reconhecimento", f.reconhecimento === "navegador" ? "do navegador (pt-BR)" : "indisponível neste navegador"],
+          ["Texto reconhecido", texto || "nenhum"], ["Palavras da frase", num(P._interno.coberturaFrase(texto) * 100) + "% (mínimo 70%)"], ["Tentativa", f.tentativa + " de 3"]];
+        if (!s._micOk) return { estado: "falha", resumo: f.erro, dados: dados };
+        return {
+          estado: "ok", dados: dados,
+          resumo: ev.tipo === "frase_nao_reconhecida" ? "Frase não reconhecida na 3ª tentativa: a verificação seguiria e o trecho iria para revisão."
+            : f.reconhecimento === "navegador" ? "Frase reconhecida: a verificação da prova seria liberada."
+            : "Voz captada sem reconhecimento: a verificação seguiria com o trecho para conferência.",
+          extra: ev.evidencias.audio ? [h("div", { class: "midias" }, [figura(h("audio", { controls: "", src: ev.evidencias.audio }), "Trecho gravado, como fica na auditoria")])] : []
+        };
       }
     },
     {
